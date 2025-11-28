@@ -1,0 +1,2062 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <title>OSRS GO</title>
+    
+    <script src="https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.js"></script>
+    <link href="https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.css" rel="stylesheet" />
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=MedievalSharp&display=swap" rel="stylesheet">
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        :root {
+            --gold: #ffd700;
+            --gold-dark: #b8860b;
+            --gold-light: #ffec80;
+            --brown: #3d2914;
+            --brown-light: #5c3d1e;
+            --brown-dark: #1a0f05;
+            --green: #2d5a27;
+            --green-light: #4a8c3f;
+            --red: #8b1a1a;
+            --blue: #1a4a8b;
+            --text-orange: #ff981f;
+            
+            /* Quality Colors */
+            --quality-common: #9e9e9e;
+            --quality-uncommon: #4caf50;
+            --quality-rare: #2196f3;
+            --quality-epic: #9c27b0;
+            --quality-legendary: #ff9800;
+        }
+
+        html, body {
+            height: 100%;
+            width: 100%;
+            overflow: hidden;
+            font-family: 'MedievalSharp', cursive;
+            background: #0a0a0a;
+        }
+
+        /* ============ LOADING SCREEN ============ */
+        #loading-screen {
+            position: fixed;
+            inset: 0;
+            background: 
+                radial-gradient(ellipse at center, #1a1510 0%, #0d0805 100%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+            transition: opacity 0.8s ease;
+        }
+
+        #loading-screen::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: url("data:image/svg+xml,%3Csvg viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+            opacity: 0.05;
+            pointer-events: none;
+        }
+
+        #loading-screen.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .loading-logo {
+            font-family: 'Cinzel', serif;
+            font-size: clamp(2.5rem, 8vw, 4rem);
+            font-weight: 900;
+            background: linear-gradient(180deg, #ffd700 0%, #b8860b 50%, #8b6914 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            filter: drop-shadow(0 4px 8px rgba(0,0,0,0.8)) drop-shadow(0 0 30px rgba(255,215,0,0.3));
+            margin-bottom: 0.5rem;
+            letter-spacing: 6px;
+        }
+
+        .loading-subtitle {
+            color: var(--text-orange);
+            font-size: 1rem;
+            margin-bottom: 3rem;
+            opacity: 0.8;
+            letter-spacing: 2px;
+        }
+
+        .loading-bar-container {
+            width: min(80%, 320px);
+            height: 28px;
+            background: linear-gradient(180deg, #0a0a0a 0%, #1a1a1a 50%, #0a0a0a 100%);
+            border: 3px solid var(--brown);
+            border-radius: 6px;
+            overflow: hidden;
+            box-shadow: inset 0 4px 8px rgba(0,0,0,0.8), 0 0 20px rgba(0,0,0,0.5);
+            position: relative;
+        }
+
+        .loading-bar {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(180deg, #5cb85c 0%, #3d8b3d 50%, #2d662d 100%);
+            box-shadow: 0 0 20px rgba(92, 184, 92, 0.5);
+            transition: width 0.4s ease;
+            position: relative;
+        }
+
+        .loading-bar::after {
+            content: '';
+            position: absolute;
+            top: 2px;
+            left: 4px;
+            right: 4px;
+            height: 6px;
+            background: linear-gradient(180deg, rgba(255,255,255,0.4) 0%, transparent 100%);
+            border-radius: 2px;
+        }
+
+        .loading-text {
+            color: #666;
+            font-size: 0.85rem;
+            margin-top: 1.2rem;
+            letter-spacing: 1px;
+        }
+
+        /* ============ GAME CONTAINER ============ */
+        #game-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+        }
+
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+
+        .mapboxgl-ctrl-logo, .mapboxgl-ctrl-attrib { display: none !important; }
+
+        /* ============ PLAYER MARKER ============ */
+        .player-marker {
+            width: 70px;
+            height: 70px;
+            position: relative;
+            filter: drop-shadow(0 8px 16px rgba(0,0,0,0.6));
+        }
+
+        .player-pulse-ring {
+            position: absolute;
+            inset: -10px;
+            border: 3px solid var(--gold);
+            border-radius: 50%;
+            animation: playerPulse 2s ease-out infinite;
+            opacity: 0;
+        }
+
+        .player-pulse-ring:nth-child(2) { animation-delay: 0.5s; }
+
+        @keyframes playerPulse {
+            0% { transform: scale(0.6); opacity: 0.8; }
+            100% { transform: scale(1.4); opacity: 0; }
+        }
+
+        .player-body {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 50px;
+            height: 50px;
+            background: 
+                radial-gradient(circle at 30% 25%, #fff8dc 0%, transparent 25%),
+                radial-gradient(circle at 50% 50%, #ffd700 0%, #b8860b 60%, #8b6508 100%);
+            border: 4px solid var(--brown);
+            border-radius: 50%;
+            box-shadow: 
+                0 0 30px rgba(255, 215, 0, 0.6),
+                inset 0 -8px 16px rgba(0,0,0,0.4),
+                inset 0 4px 8px rgba(255,255,255,0.3);
+        }
+
+        .player-icon {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 24px;
+            filter: drop-shadow(1px 1px 2px rgba(0,0,0,0.8));
+        }
+
+        .player-direction {
+            position: absolute;
+            top: -6px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border-left: 12px solid transparent;
+            border-right: 12px solid transparent;
+            border-bottom: 20px solid var(--gold);
+            filter: drop-shadow(0 -2px 4px rgba(255,215,0,0.5));
+        }
+
+        .player-direction::after {
+            content: '';
+            position: absolute;
+            top: 8px;
+            left: -6px;
+            border-left: 6px solid transparent;
+            border-right: 6px solid transparent;
+            border-bottom: 10px solid var(--gold-light);
+        }
+
+        /* ============ NODE MARKERS ============ */
+        .node-marker {
+            cursor: pointer;
+            transition: transform 0.2s ease;
+            filter: drop-shadow(0 6px 12px rgba(0,0,0,0.5));
+        }
+
+        .node-marker:hover { transform: scale(1.1); }
+        .node-marker.disabled { opacity: 0.4; pointer-events: none; }
+
+        .node-container {
+            position: relative;
+            width: 56px;
+            height: 70px;
+        }
+
+        .node-glow {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            opacity: 0.6;
+            animation: nodeGlow 2s ease-in-out infinite;
+        }
+
+        @keyframes nodeGlow {
+            0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.4; }
+            50% { transform: translate(-50%, -50%) scale(1.2); opacity: 0.7; }
+        }
+
+        .node-icon-wrapper {
+            position: relative;
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 3px solid;
+            box-shadow: 
+                0 4px 12px rgba(0,0,0,0.5),
+                inset 0 -4px 8px rgba(0,0,0,0.3),
+                inset 0 4px 8px rgba(255,255,255,0.2);
+        }
+
+        .node-icon {
+            font-size: 28px;
+            filter: drop-shadow(1px 2px 2px rgba(0,0,0,0.5));
+        }
+
+        .node-quality-badge {
+            position: absolute;
+            top: -4px;
+            right: -4px;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            font-weight: bold;
+            color: #fff;
+            border: 2px solid rgba(255,255,255,0.3);
+            box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+        }
+
+        .node-info {
+            position: absolute;
+            bottom: -2px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.85);
+            padding: 2px 8px;
+            border-radius: 4px;
+            white-space: nowrap;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .node-name {
+            font-size: 9px;
+            color: #fff;
+            font-family: 'Cinzel', serif;
+        }
+
+        .node-efficiency {
+            font-size: 8px;
+            color: var(--gold);
+            text-align: center;
+        }
+
+        /* Quality Colors */
+        .quality-common .node-icon-wrapper {
+            background: linear-gradient(180deg, #9e9e9e 0%, #616161 50%, #424242 100%);
+            border-color: #757575;
+        }
+        .quality-common .node-glow { background: radial-gradient(circle, #9e9e9e 0%, transparent 70%); }
+        .quality-common .node-quality-badge { background: #616161; }
+
+        .quality-uncommon .node-icon-wrapper {
+            background: linear-gradient(180deg, #66bb6a 0%, #43a047 50%, #2e7d32 100%);
+            border-color: #4caf50;
+        }
+        .quality-uncommon .node-glow { background: radial-gradient(circle, #4caf50 0%, transparent 70%); }
+        .quality-uncommon .node-quality-badge { background: #2e7d32; }
+
+        .quality-rare .node-icon-wrapper {
+            background: linear-gradient(180deg, #64b5f6 0%, #1e88e5 50%, #1565c0 100%);
+            border-color: #2196f3;
+        }
+        .quality-rare .node-glow { background: radial-gradient(circle, #2196f3 0%, transparent 70%); }
+        .quality-rare .node-quality-badge { background: #1565c0; }
+
+        .quality-epic .node-icon-wrapper {
+            background: linear-gradient(180deg, #ba68c8 0%, #8e24aa 50%, #6a1b9a 100%);
+            border-color: #9c27b0;
+        }
+        .quality-epic .node-glow { background: radial-gradient(circle, #9c27b0 0%, transparent 70%); }
+        .quality-epic .node-quality-badge { background: #6a1b9a; }
+
+        .quality-legendary .node-icon-wrapper {
+            background: linear-gradient(180deg, #ffcc80 0%, #ff9800 50%, #e65100 100%);
+            border-color: #ff9800;
+            animation: legendaryShine 3s ease-in-out infinite;
+        }
+        .quality-legendary .node-glow { 
+            background: radial-gradient(circle, #ff9800 0%, transparent 70%);
+            animation: nodeGlow 1s ease-in-out infinite;
+        }
+        .quality-legendary .node-quality-badge { background: linear-gradient(135deg, #ff9800, #ff5722); }
+
+        @keyframes legendaryShine {
+            0%, 100% { box-shadow: 0 4px 12px rgba(0,0,0,0.5), inset 0 -4px 8px rgba(0,0,0,0.3), 0 0 20px rgba(255,152,0,0.5); }
+            50% { box-shadow: 0 4px 12px rgba(0,0,0,0.5), inset 0 -4px 8px rgba(0,0,0,0.3), 0 0 40px rgba(255,152,0,0.8); }
+        }
+
+        /* Skill type colors for icons */
+        .node-mining .node-icon-wrapper { --skill-accent: #78909c; }
+        .node-woodcutting .node-icon-wrapper { --skill-accent: #8d6e63; }
+        .node-fishing .node-icon-wrapper { --skill-accent: #4fc3f7; }
+        .node-combat .node-icon-wrapper { --skill-accent: #ef5350; }
+
+        /* ============ HUD ============ */
+        #hud {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+            padding: 12px;
+            pointer-events: none;
+        }
+
+        #hud > * { pointer-events: auto; }
+
+        .stats-panel {
+            background: 
+                linear-gradient(180deg, rgba(61, 41, 20, 0.95) 0%, rgba(35, 24, 12, 0.95) 100%);
+            border: 3px solid var(--gold-dark);
+            border-radius: 10px;
+            padding: 12px 16px;
+            box-shadow: 
+                0 6px 20px rgba(0, 0, 0, 0.6),
+                inset 0 1px 0 rgba(255, 215, 0, 0.2),
+                inset 0 -1px 0 rgba(0, 0, 0, 0.3);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stats-panel::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--gold), transparent);
+        }
+
+        .stats-row {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        .stat-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .stat-icon {
+            width: 28px;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 6px;
+            border: 1px solid rgba(255,215,0,0.2);
+        }
+
+        .stat-value {
+            color: var(--gold);
+            font-family: 'Cinzel', serif;
+            font-weight: 700;
+            font-size: 1.1rem;
+            text-shadow: 1px 1px 3px #000;
+        }
+
+        /* ============ SKILLS PANEL ============ */
+        #skills-panel {
+            position: absolute;
+            top: 80px;
+            left: 12px;
+            z-index: 1000;
+        }
+
+        .skill-item {
+            background: linear-gradient(180deg, rgba(61, 41, 20, 0.95) 0%, rgba(35, 24, 12, 0.95) 100%);
+            border: 2px solid var(--brown-light);
+            border-radius: 8px;
+            padding: 10px 14px;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            min-width: 150px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+        }
+
+        .skill-icon-wrap {
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 8px;
+            border: 2px solid rgba(255, 215, 0, 0.3);
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.5);
+        }
+
+        .skill-info { flex: 1; }
+
+        .skill-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .skill-name {
+            color: var(--text-orange);
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .skill-level {
+            color: var(--gold);
+            font-family: 'Cinzel', serif;
+            font-weight: 700;
+            font-size: 1.1rem;
+        }
+
+        .skill-xp-bar {
+            width: 100%;
+            height: 6px;
+            background: rgba(0, 0, 0, 0.6);
+            border-radius: 3px;
+            margin-top: 4px;
+            overflow: hidden;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .skill-xp-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4caf50, #8bc34a);
+            border-radius: 2px;
+            transition: width 0.4s ease;
+            box-shadow: 0 0 8px rgba(76, 175, 80, 0.5);
+        }
+
+        /* ============ RIGHT PANEL ============ */
+        #right-panel {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 10px;
+        }
+
+        .compass {
+            width: 56px;
+            height: 56px;
+            background: linear-gradient(180deg, rgba(61, 41, 20, 0.95) 0%, rgba(35, 24, 12, 0.95) 100%);
+            border: 3px solid var(--gold-dark);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+        }
+
+        .compass-inner {
+            font-family: 'Cinzel', serif;
+            font-weight: 900;
+            font-size: 1.4rem;
+            color: var(--gold);
+            text-shadow: 1px 1px 2px #000;
+            transition: transform 0.3s ease;
+        }
+
+        .info-box {
+            background: rgba(0, 0, 0, 0.75);
+            padding: 10px 14px;
+            border-radius: 8px;
+            border: 2px solid var(--brown-light);
+            text-align: right;
+        }
+
+        .info-label {
+            color: #888;
+            font-size: 0.65rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .info-value {
+            color: var(--gold);
+            font-family: 'Cinzel', serif;
+            font-size: 1.1rem;
+            font-weight: 700;
+        }
+
+        .gps-status {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.7rem;
+            color: #888;
+        }
+
+        .gps-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #888;
+        }
+
+        .gps-dot.active {
+            background: #4caf50;
+            box-shadow: 0 0 8px rgba(76,175,80,0.8);
+            animation: gpsBlink 2s ease-in-out infinite;
+        }
+
+        .gps-dot.error { background: #f44336; }
+
+        @keyframes gpsBlink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* ============ IDLE PANEL ============ */
+        #idle-panel {
+            position: absolute;
+            bottom: 90px;
+            left: 12px;
+            right: 12px;
+            z-index: 1000;
+            background: linear-gradient(180deg, rgba(61, 41, 20, 0.98) 0%, rgba(35, 24, 12, 0.98) 100%);
+            border: 3px solid var(--gold-dark);
+            border-radius: 12px;
+            padding: 16px;
+            display: none;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+        }
+
+        #idle-panel.visible { display: block; animation: slideUp 0.3s ease; }
+
+        @keyframes slideUp {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .idle-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .idle-title {
+            font-family: 'Cinzel', serif;
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: var(--gold);
+        }
+
+        .idle-close {
+            width: 28px;
+            height: 28px;
+            background: rgba(139, 0, 0, 0.8);
+            border: 2px solid #ff4444;
+            border-radius: 6px;
+            color: #fff;
+            font-size: 1rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .idle-node-info {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 12px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 8px;
+            margin-bottom: 12px;
+        }
+
+        .idle-node-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            border: 3px solid;
+        }
+
+        .idle-node-details { flex: 1; }
+
+        .idle-node-name {
+            font-family: 'Cinzel', serif;
+            font-size: 1rem;
+            color: #fff;
+            margin-bottom: 4px;
+        }
+
+        .idle-node-stats {
+            display: flex;
+            gap: 16px;
+            font-size: 0.8rem;
+        }
+
+        .idle-stat {
+            color: #aaa;
+        }
+
+        .idle-stat span {
+            color: var(--gold);
+            font-weight: bold;
+        }
+
+        .idle-progress {
+            margin-bottom: 12px;
+        }
+
+        .idle-progress-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.8rem;
+            color: #aaa;
+            margin-bottom: 6px;
+        }
+
+        .idle-progress-bar {
+            width: 100%;
+            height: 24px;
+            background: rgba(0,0,0,0.5);
+            border-radius: 6px;
+            overflow: hidden;
+            border: 2px solid var(--brown-light);
+        }
+
+        .idle-progress-fill {
+            height: 100%;
+            background: linear-gradient(180deg, #4caf50 0%, #2e7d32 100%);
+            transition: width 0.1s linear;
+            position: relative;
+        }
+
+        .idle-progress-fill::after {
+            content: '';
+            position: absolute;
+            top: 2px;
+            left: 4px;
+            right: 4px;
+            height: 6px;
+            background: linear-gradient(180deg, rgba(255,255,255,0.3) 0%, transparent 100%);
+            border-radius: 2px;
+        }
+
+        .idle-rewards {
+            display: flex;
+            justify-content: space-around;
+            padding: 10px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 8px;
+        }
+
+        .idle-reward {
+            text-align: center;
+        }
+
+        .idle-reward-value {
+            font-family: 'Cinzel', serif;
+            font-size: 1.2rem;
+            font-weight: bold;
+        }
+
+        .idle-reward-label {
+            font-size: 0.7rem;
+            color: #888;
+            text-transform: uppercase;
+        }
+
+        .idle-reward.xp .idle-reward-value { color: #7cfc00; }
+        .idle-reward.items .idle-reward-value { color: var(--gold); }
+        .idle-reward.rate .idle-reward-value { color: #64b5f6; }
+
+        /* ============ DISCOVERED NODES PANEL ============ */
+        #nodes-panel {
+            position: absolute;
+            bottom: 90px;
+            left: 12px;
+            right: 12px;
+            z-index: 999;
+            background: linear-gradient(180deg, rgba(61, 41, 20, 0.98) 0%, rgba(35, 24, 12, 0.98) 100%);
+            border: 3px solid var(--gold-dark);
+            border-radius: 12px;
+            padding: 16px;
+            display: none;
+            max-height: 50vh;
+            overflow-y: auto;
+        }
+
+        #nodes-panel.visible { display: block; animation: slideUp 0.3s ease; }
+
+        .nodes-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid rgba(255, 215, 0, 0.2);
+        }
+
+        .nodes-title {
+            font-family: 'Cinzel', serif;
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: var(--gold);
+        }
+
+        .nodes-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            gap: 10px;
+        }
+
+        .discovered-node {
+            background: rgba(0,0,0,0.4);
+            border: 2px solid rgba(255,255,255,0.1);
+            border-radius: 8px;
+            padding: 10px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .discovered-node:hover {
+            border-color: var(--gold);
+            background: rgba(255,215,0,0.1);
+        }
+
+        .discovered-node.active {
+            border-color: #4caf50;
+            background: rgba(76,175,80,0.2);
+        }
+
+        .discovered-node-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 6px;
+        }
+
+        .discovered-node-icon {
+            font-size: 20px;
+        }
+
+        .discovered-node-name {
+            font-size: 0.8rem;
+            color: #fff;
+            flex: 1;
+        }
+
+        .discovered-node-quality {
+            font-size: 0.6rem;
+            padding: 2px 6px;
+            border-radius: 4px;
+            color: #fff;
+            text-transform: uppercase;
+        }
+
+        .discovered-node-stats {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.7rem;
+            color: #888;
+        }
+
+        /* ============ BOTTOM NAV ============ */
+        #bottom-nav {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+            background: linear-gradient(180deg, rgba(61, 41, 20, 0.98) 0%, rgba(20, 14, 8, 0.98) 100%);
+            border-top: 3px solid var(--gold-dark);
+            padding: 10px 0;
+            padding-bottom: max(10px, env(safe-area-inset-bottom));
+        }
+
+        .nav-items {
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+        }
+
+        .nav-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            color: var(--text-orange);
+            font-size: 0.65rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            cursor: pointer;
+            padding: 6px 16px;
+            border-radius: 8px;
+            transition: all 0.2s ease;
+            position: relative;
+        }
+
+        .nav-item::before {
+            content: '';
+            position: absolute;
+            top: -3px;
+            left: 50%;
+            transform: translateX(-50%) scaleX(0);
+            width: 30px;
+            height: 3px;
+            background: var(--gold);
+            border-radius: 2px;
+            transition: transform 0.2s ease;
+        }
+
+        .nav-item.active::before { transform: translateX(-50%) scaleX(1); }
+        .nav-item.active { color: var(--gold); }
+
+        .nav-icon { font-size: 1.6rem; }
+
+        .nav-badge {
+            position: absolute;
+            top: 0;
+            right: 8px;
+            background: #e53935;
+            color: #fff;
+            font-size: 0.6rem;
+            padding: 2px 5px;
+            border-radius: 8px;
+            min-width: 16px;
+            text-align: center;
+        }
+
+        /* ============ INVENTORY PANEL ============ */
+        #inventory-panel {
+            position: absolute;
+            bottom: 90px;
+            left: 12px;
+            right: 12px;
+            z-index: 999;
+            background: linear-gradient(180deg, rgba(61, 41, 20, 0.98) 0%, rgba(35, 24, 12, 0.98) 100%);
+            border: 3px solid var(--gold-dark);
+            border-radius: 12px;
+            padding: 16px;
+            display: none;
+            max-height: 60vh;
+            overflow-y: auto;
+        }
+
+        #inventory-panel.visible { display: block; animation: slideUp 0.3s ease; }
+
+        .inventory-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid rgba(255, 215, 0, 0.2);
+        }
+
+        .inventory-title {
+            font-family: 'Cinzel', serif;
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: var(--gold);
+        }
+
+        .inventory-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+        }
+
+        .inventory-slot {
+            aspect-ratio: 1;
+            background: rgba(0, 0, 0, 0.5);
+            border: 2px solid rgba(255, 215, 0, 0.2);
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            transition: all 0.2s ease;
+        }
+
+        .inventory-slot.filled {
+            border-color: var(--gold-dark);
+            background: rgba(0,0,0,0.6);
+        }
+
+        .item-icon { font-size: 1.8rem; }
+
+        .item-count {
+            position: absolute;
+            bottom: 2px;
+            right: 4px;
+            font-family: 'Cinzel', serif;
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: var(--gold);
+            text-shadow: 1px 1px 2px #000;
+        }
+
+        /* ============ NOTIFICATIONS ============ */
+        #notification {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 2000;
+            background: linear-gradient(180deg, rgba(61, 41, 20, 0.98) 0%, rgba(35, 24, 12, 0.98) 100%);
+            border: 3px solid var(--gold);
+            border-radius: 12px;
+            padding: 24px 36px;
+            text-align: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.6), 0 0 40px rgba(255,215,0,0.2);
+        }
+
+        #notification.visible { opacity: 1; }
+
+        .notif-text {
+            color: var(--gold);
+            font-family: 'Cinzel', serif;
+            font-size: 1.3rem;
+            font-weight: 700;
+            text-shadow: 1px 1px 3px #000;
+        }
+
+        .notif-subtext {
+            color: var(--text-orange);
+            font-size: 1rem;
+            margin-top: 6px;
+        }
+
+        /* ============ XP DROP ============ */
+        .xp-drop {
+            position: absolute;
+            z-index: 1500;
+            font-family: 'Cinzel', serif;
+            font-weight: 700;
+            font-size: 1.2rem;
+            color: #7cfc00;
+            text-shadow: 2px 2px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000;
+            pointer-events: none;
+            animation: xpFloat 2s ease-out forwards;
+        }
+
+        @keyframes xpFloat {
+            0% { transform: translateY(0) scale(1); opacity: 1; }
+            50% { transform: translateY(-40px) scale(1.1); }
+            100% { transform: translateY(-80px) scale(0.8); opacity: 0; }
+        }
+
+        .resource-drop {
+            position: absolute;
+            z-index: 1500;
+            font-size: 1.5rem;
+            pointer-events: none;
+            animation: resourceFloat 1.5s ease-out forwards;
+        }
+
+        @keyframes resourceFloat {
+            0% { transform: translateY(0) scale(0.5); opacity: 0; }
+            20% { transform: translateY(-20px) scale(1.2); opacity: 1; }
+            100% { transform: translateY(-60px) scale(1); opacity: 0; }
+        }
+
+        /* ============ LEVEL UP MODAL ============ */
+        #level-up-modal {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.85);
+            z-index: 3000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #level-up-modal.visible { display: flex; animation: fadeIn 0.3s ease; }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .level-up-content {
+            background: linear-gradient(180deg, rgba(61, 41, 20, 0.98) 0%, rgba(35, 24, 12, 0.98) 100%);
+            border: 4px solid var(--gold);
+            border-radius: 16px;
+            padding: 36px 48px;
+            text-align: center;
+            animation: levelUpPop 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            box-shadow: 0 0 60px rgba(255,215,0,0.4);
+        }
+
+        @keyframes levelUpPop {
+            0% { transform: scale(0.3) rotate(-10deg); opacity: 0; }
+            60% { transform: scale(1.1) rotate(2deg); }
+            100% { transform: scale(1) rotate(0deg); opacity: 1; }
+        }
+
+        .level-up-icon {
+            font-size: 4.5rem;
+            margin-bottom: 12px;
+            animation: iconBounce 0.5s ease 0.3s;
+        }
+
+        @keyframes iconBounce {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.3); }
+        }
+
+        .level-up-title {
+            font-family: 'Cinzel', serif;
+            font-size: 2rem;
+            font-weight: 900;
+            background: linear-gradient(180deg, #ffd700 0%, #ff9800 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 8px;
+        }
+
+        .level-up-skill {
+            color: var(--text-orange);
+            font-size: 1.2rem;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .level-up-level {
+            font-family: 'Cinzel', serif;
+            font-size: 4rem;
+            font-weight: 900;
+            color: #fff;
+            text-shadow: 0 0 20px rgba(255, 255, 255, 0.5);
+        }
+
+        .level-up-close {
+            margin-top: 24px;
+            padding: 12px 36px;
+            font-family: 'Cinzel', serif;
+            font-size: 1rem;
+            font-weight: 700;
+            color: #fff;
+            background: linear-gradient(180deg, #4caf50 0%, #2e7d32 100%);
+            border: 3px solid #1b5e20;
+            border-radius: 8px;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+            transition: transform 0.2s ease;
+        }
+
+        .level-up-close:hover { transform: scale(1.05); }
+
+        /* ============ ACTION BUTTON ============ */
+        #action-btn {
+            position: absolute;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            padding: 16px 48px;
+            font-family: 'Cinzel', serif;
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: #fff;
+            background: linear-gradient(180deg, #4caf50 0%, #2e7d32 50%, #1b5e20 100%);
+            border: 3px solid #1b5e20;
+            border-radius: 12px;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5), inset 0 2px 0 rgba(255, 255, 255, 0.2);
+            cursor: pointer;
+            display: none;
+            transition: all 0.2s ease;
+        }
+
+        #action-btn:active { transform: translateX(-50%) scale(0.95); }
+    </style>
+</head>
+<body>
+    <!-- Loading Screen -->
+    <div id="loading-screen">
+        <div class="loading-logo">OSRS GO</div>
+        <div class="loading-subtitle">Idle • Explore • Gather</div>
+        <div class="loading-bar-container">
+            <div class="loading-bar" id="loading-bar"></div>
+        </div>
+        <div class="loading-text" id="loading-text">Initializing...</div>
+    </div>
+
+    <!-- Game Container -->
+    <div id="game-container">
+        <div id="map"></div>
+
+        <!-- HUD -->
+        <div id="hud">
+            <div class="stats-panel">
+                <div class="stats-row">
+                    <div class="stat-item">
+                        <div class="stat-icon">❤️</div>
+                        <div class="stat-value" id="hp-display">10/10</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-icon">⚔️</div>
+                        <div class="stat-value" id="combat-display">3</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-icon">💰</div>
+                        <div class="stat-value" id="gold-display">0</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-icon">📦</div>
+                        <div class="stat-value" id="total-items">0</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Skills Panel -->
+        <div id="skills-panel">
+            <div class="skill-item">
+                <div class="skill-icon-wrap">⛏️</div>
+                <div class="skill-info">
+                    <div class="skill-header">
+                        <span class="skill-name">Mining</span>
+                        <span class="skill-level" id="mining-level">1</span>
+                    </div>
+                    <div class="skill-xp-bar">
+                        <div class="skill-xp-fill" id="mining-xp-bar"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="skill-item">
+                <div class="skill-icon-wrap">🪓</div>
+                <div class="skill-info">
+                    <div class="skill-header">
+                        <span class="skill-name">Woodcutting</span>
+                        <span class="skill-level" id="woodcutting-level">1</span>
+                    </div>
+                    <div class="skill-xp-bar">
+                        <div class="skill-xp-fill" id="woodcutting-xp-bar"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="skill-item">
+                <div class="skill-icon-wrap">🎣</div>
+                <div class="skill-info">
+                    <div class="skill-header">
+                        <span class="skill-name">Fishing</span>
+                        <span class="skill-level" id="fishing-level">1</span>
+                    </div>
+                    <div class="skill-xp-bar">
+                        <div class="skill-xp-fill" id="fishing-xp-bar"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Panel -->
+        <div id="right-panel">
+            <div class="compass">
+                <div class="compass-inner" id="compass-needle">N</div>
+            </div>
+            <div class="info-box">
+                <div class="info-label">Discovered</div>
+                <div class="info-value" id="nodes-discovered">0</div>
+            </div>
+            <div class="info-box">
+                <div class="gps-status">
+                    <div class="gps-dot" id="gps-dot"></div>
+                    <span id="gps-text">Searching...</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Idle Panel -->
+        <div id="idle-panel">
+            <div class="idle-header">
+                <div class="idle-title">⚒️ Gathering...</div>
+                <button class="idle-close" id="idle-close">×</button>
+            </div>
+            <div class="idle-node-info">
+                <div class="idle-node-icon" id="idle-node-icon">🪨</div>
+                <div class="idle-node-details">
+                    <div class="idle-node-name" id="idle-node-name">Copper Rock</div>
+                    <div class="idle-node-stats">
+                        <div class="idle-stat">Quality: <span id="idle-quality">Common</span></div>
+                        <div class="idle-stat">Efficiency: <span id="idle-efficiency">100%</span></div>
+                    </div>
+                </div>
+            </div>
+            <div class="idle-progress">
+                <div class="idle-progress-label">
+                    <span id="idle-action">Mining...</span>
+                    <span id="idle-timer">0.0s</span>
+                </div>
+                <div class="idle-progress-bar">
+                    <div class="idle-progress-fill" id="idle-progress-fill"></div>
+                </div>
+            </div>
+            <div class="idle-rewards">
+                <div class="idle-reward xp">
+                    <div class="idle-reward-value" id="idle-total-xp">0</div>
+                    <div class="idle-reward-label">Total XP</div>
+                </div>
+                <div class="idle-reward items">
+                    <div class="idle-reward-value" id="idle-total-items">0</div>
+                    <div class="idle-reward-label">Items</div>
+                </div>
+                <div class="idle-reward rate">
+                    <div class="idle-reward-value" id="idle-xp-rate">0/hr</div>
+                    <div class="idle-reward-label">XP Rate</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Discovered Nodes Panel -->
+        <div id="nodes-panel">
+            <div class="nodes-header">
+                <div class="nodes-title">📍 Discovered Nodes</div>
+                <button class="idle-close" id="nodes-close">×</button>
+            </div>
+            <div class="nodes-grid" id="nodes-grid"></div>
+        </div>
+
+        <!-- Inventory Panel -->
+        <div id="inventory-panel">
+            <div class="inventory-header">
+                <div class="inventory-title">🎒 Inventory</div>
+                <button class="idle-close" id="inventory-close">×</button>
+            </div>
+            <div class="inventory-grid" id="inventory-grid"></div>
+        </div>
+
+        <!-- Action Button -->
+        <button id="action-btn">Gather</button>
+
+        <!-- Bottom Nav -->
+        <div id="bottom-nav">
+            <div class="nav-items">
+                <div class="nav-item active" data-panel="map">
+                    <div class="nav-icon">🗺️</div>
+                    <span>Map</span>
+                </div>
+                <div class="nav-item" data-panel="nodes">
+                    <div class="nav-icon">📍</div>
+                    <span>Nodes</span>
+                    <div class="nav-badge" id="nodes-badge" style="display:none">0</div>
+                </div>
+                <div class="nav-item" data-panel="inventory">
+                    <div class="nav-icon">🎒</div>
+                    <span>Bag</span>
+                </div>
+                <div class="nav-item" data-panel="skills">
+                    <div class="nav-icon">📊</div>
+                    <span>Skills</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Notification -->
+        <div id="notification">
+            <div class="notif-text" id="notif-text"></div>
+            <div class="notif-subtext" id="notif-subtext"></div>
+        </div>
+
+        <!-- Level Up Modal -->
+        <div id="level-up-modal">
+            <div class="level-up-content">
+                <div class="level-up-icon" id="level-up-icon">⛏️</div>
+                <div class="level-up-title">LEVEL UP!</div>
+                <div class="level-up-skill" id="level-up-skill">Mining</div>
+                <div class="level-up-level" id="level-up-level">2</div>
+                <button class="level-up-close" id="level-up-close">Continue</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ====================================================
+        // OSRS GO - Idle Gathering with Node Quality System
+        // ====================================================
+
+        const QUALITIES = {
+            common: { name: 'Common', color: '#9e9e9e', multiplier: 1.0, weight: 50 },
+            uncommon: { name: 'Uncommon', color: '#4caf50', multiplier: 1.25, weight: 30 },
+            rare: { name: 'Rare', color: '#2196f3', multiplier: 1.5, weight: 15 },
+            epic: { name: 'Epic', color: '#9c27b0', multiplier: 2.0, weight: 4 },
+            legendary: { name: 'Legendary', color: '#ff9800', multiplier: 3.0, weight: 1 }
+        };
+
+        const NODE_TYPES = {
+            // Mining
+            copper: { skill: 'mining', icon: '🪨', baseXP: 17, level: 1, name: 'Copper', resource: 'Copper Ore', baseTime: 3000 },
+            tin: { skill: 'mining', icon: 'ite', baseXP: 17, level: 1, name: 'Tin', resource: 'Tin Ore', baseTime: 3000 },
+            iron: { skill: 'mining', icon: '�ite', baseXP: 35, level: 15, name: 'Iron', resource: 'Iron Ore', baseTime: 4000 },
+            coal: { skill: 'mining', icon: '⬛', baseXP: 50, level: 30, name: 'Coal', resource: 'Coal', baseTime: 5000 },
+            mithril: { skill: 'mining', icon: '💎', baseXP: 80, level: 55, name: 'Mithril', resource: 'Mithril Ore', baseTime: 6000 },
+            
+            // Woodcutting  
+            tree: { skill: 'woodcutting', icon: '🌲', baseXP: 25, level: 1, name: 'Tree', resource: 'Logs', baseTime: 2500 },
+            oak: { skill: 'woodcutting', icon: '🌳', baseXP: 37, level: 15, name: 'Oak', resource: 'Oak Logs', baseTime: 3500 },
+            willow: { skill: 'woodcutting', icon: '🌴', baseXP: 67, level: 30, name: 'Willow', resource: 'Willow Logs', baseTime: 4500 },
+            maple: { skill: 'woodcutting', icon: '🍁', baseXP: 100, level: 45, name: 'Maple', resource: 'Maple Logs', baseTime: 5500 },
+            yew: { skill: 'woodcutting', icon: '🎄', baseXP: 175, level: 60, name: 'Yew', resource: 'Yew Logs', baseTime: 7000 },
+            
+            // Fishing
+            shrimp: { skill: 'fishing', icon: '🦐', baseXP: 10, level: 1, name: 'Shrimp Spot', resource: 'Raw Shrimp', baseTime: 2000 },
+            trout: { skill: 'fishing', icon: '🐟', baseXP: 50, level: 20, name: 'Trout Spot', resource: 'Raw Trout', baseTime: 3500 },
+            lobster: { skill: 'fishing', icon: '🦞', baseXP: 90, level: 40, name: 'Lobster Spot', resource: 'Raw Lobster', baseTime: 5000 },
+            shark: { skill: 'fishing', icon: '🦈', baseXP: 110, level: 76, name: 'Shark Spot', resource: 'Raw Shark', baseTime: 6500 }
+        };
+
+        const XP_TABLE = [0,83,174,276,388,512,650,801,969,1154,1358,1584,1833,2107,2411,2746,3115,3523,3973,4470,5018,5624,6291,7028,7842,8740,9730,10824,12031,13363,14833,16456,18247,20224,22406,24815,27473,30408,33648,37224,41171,45529,50339,55649,61512,67983,75127,83014,91721,101333,111945,123660,136594,150872,166636,184040,203254,224466,247886,273742,302288,333804,368599,407015,449428,496254,547953,605032,668051,737627,814445,899257,992895,1096278,1210421,1336443,1475581,1629200,1798808,1986068,2192818,2421087,2673114,2951373,3258594,3597792,3972294,4385776,4842295,5346332,5902831,6517253,7195629,7944614,8771558,9684577,10692629,11805606,13034431];
+
+        const Game = {
+            player: {
+                position: null,
+                hp: 10,
+                maxHp: 10,
+                gold: 0,
+                combatLevel: 3,
+                skills: {
+                    mining: { level: 1, xp: 0 },
+                    woodcutting: { level: 1, xp: 0 },
+                    fishing: { level: 1, xp: 0 }
+                },
+                inventory: [],
+                maxInventory: 28,
+                discoveredNodes: {} // Persistent discovered nodes
+            },
+
+            map: null,
+            playerMarker: null,
+            nodeMarkers: new Map(),
+            
+            // Idle state
+            activeNode: null,
+            isIdling: false,
+            idleInterval: null,
+            idleProgress: 0,
+            idleStats: { totalXP: 0, totalItems: 0, startTime: 0 },
+
+            GRID_SIZE: 0.0004,
+            NODE_INTERACTION_RADIUS: 0.00025,
+
+            init() {
+                this.updateLoadingBar(10, 'Loading map...');
+                this.initMap();
+                this.updateLoadingBar(40, 'Preparing inventory...');
+                this.initInventory();
+                this.updateLoadingBar(60, 'Connecting GPS...');
+                this.initGPS();
+                this.updateLoadingBar(80, 'Setting up controls...');
+                this.initControls();
+                this.loadGameState();
+                this.updateUI();
+                this.updateLoadingBar(100, 'Ready!');
+            },
+
+            updateLoadingBar(pct, txt) {
+                document.getElementById('loading-bar').style.width = pct + '%';
+                document.getElementById('loading-text').textContent = txt;
+            },
+
+            hideLoading() {
+                document.getElementById('loading-screen').classList.add('hidden');
+            },
+
+            initMap() {
+                mapboxgl.accessToken = 'pk.eyJ1IjoibWFwYm94IiwiYSI6ImNpejY4NXVycTA2emYycXBndHRqcmZ3N3gifQ.rJcFIG214AriISLbB6B5aw';
+
+                this.map = new mapboxgl.Map({
+                    container: 'map',
+                    style: {
+                        version: 8,
+                        sources: {
+                            'osm': {
+                                type: 'raster',
+                                tiles: ['https://a.tile.openstreetmap.org/{z}/{x}/{y}.png'],
+                                tileSize: 256
+                            }
+                        },
+                        layers: [{
+                            id: 'osm-tiles',
+                            type: 'raster',
+                            source: 'osm',
+                            minzoom: 0,
+                            maxzoom: 19
+                        }]
+                    },
+                    center: [-85.0586, 41.3668], // Default location
+                    zoom: 18,
+                    pitch: 50,
+                    bearing: 0
+                });
+
+                this.map.on('load', () => {
+                    // Pokemon GO style color shift
+                    this.map.setPaintProperty('osm-tiles', 'raster-hue-rotate', 90);
+                    this.map.setPaintProperty('osm-tiles', 'raster-saturation', 0.2);
+                    this.map.setPaintProperty('osm-tiles', 'raster-brightness-min', 0.3);
+                    this.map.setPaintProperty('osm-tiles', 'raster-brightness-max', 0.9);
+                });
+
+                this.createPlayerMarker();
+            },
+
+            createPlayerMarker() {
+                const el = document.createElement('div');
+                el.className = 'player-marker';
+                el.innerHTML = `
+                    <div class="player-pulse-ring"></div>
+                    <div class="player-pulse-ring"></div>
+                    <div class="player-direction"></div>
+                    <div class="player-body">
+                        <div class="player-icon">⚔️</div>
+                    </div>
+                `;
+
+                this.playerMarker = new mapboxgl.Marker({ element: el })
+                    .setLngLat([-85.0586, 41.3668])
+                    .addTo(this.map);
+            },
+
+            initGPS() {
+                if ('geolocation' in navigator) {
+                    navigator.geolocation.watchPosition(
+                        pos => this.onLocationUpdate(pos),
+                        err => this.onLocationError(err),
+                        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+                    );
+                } else {
+                    this.onLocationError({ message: 'No GPS' });
+                }
+            },
+
+            onLocationUpdate(position) {
+                const lat = position.coords.latitude;
+                const lng = position.coords.longitude;
+
+                this.player.position = { lat, lng };
+
+                document.getElementById('gps-dot').className = 'gps-dot active';
+                document.getElementById('gps-text').textContent = `±${Math.round(position.coords.accuracy)}m`;
+
+                this.playerMarker.setLngLat([lng, lat]);
+                this.map.easeTo({ center: [lng, lat], duration: 500 });
+
+                this.generateNodesAround(lat, lng);
+                this.renderDiscoveredNodes();
+                this.checkNearbyNodes();
+
+                setTimeout(() => this.hideLoading(), 300);
+                this.saveGameState();
+            },
+
+            onLocationError(err) {
+                console.error('GPS Error:', err);
+                document.getElementById('gps-dot').className = 'gps-dot error';
+                document.getElementById('gps-text').textContent = 'Demo Mode';
+
+                // Demo location
+                this.player.position = { lat: 41.3668, lng: -85.0586 };
+                this.playerMarker.setLngLat([-85.0586, 41.3668]);
+                this.map.easeTo({ center: [-85.0586, 41.3668] });
+                this.generateNodesAround(41.3668, -85.0586);
+                this.renderDiscoveredNodes();
+
+                setTimeout(() => this.hideLoading(), 500);
+            },
+
+            generateNodesAround(lat, lng) {
+                const gridLat = Math.floor(lat / this.GRID_SIZE) * this.GRID_SIZE;
+                const gridLng = Math.floor(lng / this.GRID_SIZE) * this.GRID_SIZE;
+
+                for (let i = -5; i <= 5; i++) {
+                    for (let j = -5; j <= 5; j++) {
+                        const cellLat = gridLat + i * this.GRID_SIZE;
+                        const cellLng = gridLng + j * this.GRID_SIZE;
+                        const cellKey = `${cellLat.toFixed(6)},${cellLng.toFixed(6)}`;
+
+                        // Skip if already discovered
+                        if (this.player.discoveredNodes[cellKey]) continue;
+                        if (this.nodeMarkers.has(cellKey)) continue;
+
+                        this.generateNodeForCell(cellLat, cellLng, cellKey);
+                    }
+                }
+
+                this.updateNodesCount();
+            },
+
+            generateNodeForCell(lat, lng, cellKey) {
+                const seed = this.hashCode(cellKey);
+                const rng = this.seededRandom(seed);
+
+                // 40% chance of node
+                if (rng() > 0.40) {
+                    this.nodeMarkers.set(cellKey, null);
+                    return;
+                }
+
+                // Select type
+                const types = Object.keys(NODE_TYPES);
+                const weights = { copper: 12, tin: 12, iron: 6, coal: 3, mithril: 1, tree: 15, oak: 8, willow: 4, maple: 2, yew: 1, shrimp: 10, trout: 5, lobster: 2, shark: 1 };
+                let totalW = Object.values(weights).reduce((a, b) => a + b, 0);
+                let roll = rng() * totalW;
+                let nodeType = 'tree';
+                for (const [t, w] of Object.entries(weights)) {
+                    roll -= w;
+                    if (roll <= 0) { nodeType = t; break; }
+                }
+
+                // Select quality
+                let qRoll = rng() * 100;
+                let quality = 'common';
+                for (const [q, data] of Object.entries(QUALITIES)) {
+                    qRoll -= data.weight;
+                    if (qRoll <= 0) { quality = q; break; }
+                }
+
+                // Generate efficiency (80-120% base, modified by quality)
+                const baseEff = 0.8 + rng() * 0.4;
+                const efficiency = baseEff * QUALITIES[quality].multiplier;
+
+                const nodeLat = lat + (rng() - 0.5) * this.GRID_SIZE * 0.7;
+                const nodeLng = lng + (rng() - 0.5) * this.GRID_SIZE * 0.7;
+
+                const nodeData = {
+                    ...NODE_TYPES[nodeType],
+                    type: nodeType,
+                    quality,
+                    efficiency,
+                    lat: nodeLat,
+                    lng: nodeLng,
+                    cellKey
+                };
+
+                this.createNodeMarker(nodeData);
+            },
+
+            createNodeMarker(nodeData) {
+                const el = document.createElement('div');
+                el.className = `node-marker node-${nodeData.skill} quality-${nodeData.quality}`;
+                el.innerHTML = `
+                    <div class="node-container">
+                        <div class="node-glow"></div>
+                        <div class="node-icon-wrapper">
+                            <div class="node-icon">${nodeData.icon}</div>
+                            <div class="node-quality-badge">${QUALITIES[nodeData.quality].name[0]}</div>
+                        </div>
+                        <div class="node-info">
+                            <div class="node-name">${nodeData.name}</div>
+                            <div class="node-efficiency">${Math.round(nodeData.efficiency * 100)}% eff</div>
+                        </div>
+                    </div>
+                `;
+
+                const marker = new mapboxgl.Marker({ element: el, anchor: 'bottom' })
+                    .setLngLat([nodeData.lng, nodeData.lat])
+                    .addTo(this.map);
+
+                marker.nodeData = nodeData;
+                el.addEventListener('click', () => this.onNodeClick(marker));
+
+                this.nodeMarkers.set(nodeData.cellKey, marker);
+            },
+
+            renderDiscoveredNodes() {
+                // Re-render discovered nodes that aren't on map
+                for (const [key, data] of Object.entries(this.player.discoveredNodes)) {
+                    if (!this.nodeMarkers.has(key)) {
+                        this.createNodeMarker(data);
+                    }
+                }
+            },
+
+            checkNearbyNodes() {
+                if (!this.player.position) return;
+
+                let closest = null;
+                let closestDist = Infinity;
+
+                this.nodeMarkers.forEach(marker => {
+                    if (!marker) return;
+                    const d = this.getDistance(this.player.position.lat, this.player.position.lng, marker.nodeData.lat, marker.nodeData.lng);
+                    if (d < this.NODE_INTERACTION_RADIUS && d < closestDist) {
+                        closest = marker;
+                        closestDist = d;
+                    }
+                });
+
+                const btn = document.getElementById('action-btn');
+                if (closest && !this.isIdling) {
+                    const n = closest.nodeData;
+                    btn.style.display = 'block';
+                    btn.textContent = `Gather ${n.name}`;
+                    btn.onclick = () => this.discoverAndStartIdle(closest);
+                } else if (!this.isIdling) {
+                    btn.style.display = 'none';
+                }
+            },
+
+            onNodeClick(marker) {
+                if (!this.player.position) return;
+
+                const d = this.getDistance(this.player.position.lat, this.player.position.lng, marker.nodeData.lat, marker.nodeData.lng);
+
+                if (d <= this.NODE_INTERACTION_RADIUS) {
+                    this.discoverAndStartIdle(marker);
+                } else {
+                    // Check if already discovered
+                    if (this.player.discoveredNodes[marker.nodeData.cellKey]) {
+                        this.startIdleFromDiscovered(marker.nodeData);
+                    } else {
+                        this.showNotification('Too far!', 'Move closer to discover');
+                    }
+                }
+            },
+
+            discoverAndStartIdle(marker) {
+                const node = marker.nodeData;
+
+                // Check level
+                const playerLvl = this.player.skills[node.skill]?.level || 1;
+                if (playerLvl < node.level) {
+                    this.showNotification('Level too low!', `Need ${node.skill} level ${node.level}`);
+                    return;
+                }
+
+                // Discover node (persist it)
+                if (!this.player.discoveredNodes[node.cellKey]) {
+                    this.player.discoveredNodes[node.cellKey] = node;
+                    this.showNotification('Node Discovered!', `${QUALITIES[node.quality].name} ${node.name}`);
+                    this.updateNodesCount();
+                    this.updateNodesPanel();
+                }
+
+                this.startIdle(node);
+            },
+
+            startIdleFromDiscovered(nodeData) {
+                const playerLvl = this.player.skills[nodeData.skill]?.level || 1;
+                if (playerLvl < nodeData.level) {
+                    this.showNotification('Level too low!', `Need ${nodeData.skill} level ${nodeData.level}`);
+                    return;
+                }
+                this.startIdle(nodeData);
+            },
+
+            startIdle(node) {
+                if (this.isIdling) this.stopIdle();
+
+                this.activeNode = node;
+                this.isIdling = true;
+                this.idleProgress = 0;
+                this.idleStats = { totalXP: 0, totalItems: 0, startTime: Date.now() };
+
+                // Calculate gather time based on efficiency
+                const baseTime = node.baseTime;
+                const effTime = baseTime / node.efficiency;
+                
+                // Show idle panel
+                const panel = document.getElementById('idle-panel');
+                panel.classList.add('visible');
+
+                document.getElementById('idle-node-icon').textContent = node.icon;
+                document.getElementById('idle-node-icon').className = `idle-node-icon quality-${node.quality}`;
+                document.getElementById('idle-node-icon').style.background = `linear-gradient(180deg, ${QUALITIES[node.quality].color}88, ${QUALITIES[node.quality].color})`;
+                document.getElementById('idle-node-icon').style.borderColor = QUALITIES[node.quality].color;
+                document.getElementById('idle-node-name').textContent = node.name;
+                document.getElementById('idle-quality').textContent = QUALITIES[node.quality].name;
+                document.getElementById('idle-quality').style.color = QUALITIES[node.quality].color;
+                document.getElementById('idle-efficiency').textContent = Math.round(node.efficiency * 100) + '%';
+
+                const actionVerb = node.skill === 'mining' ? 'Mining' : node.skill === 'woodcutting' ? 'Chopping' : 'Fishing';
+                document.getElementById('idle-action').textContent = actionVerb + '...';
+
+                document.getElementById('action-btn').style.display = 'none';
+
+                // Start idle loop
+                const tickInterval = 50;
+                const progressPerTick = (tickInterval / effTime) * 100;
+
+                this.idleInterval = setInterval(() => {
+                    this.idleProgress += progressPerTick;
+
+                    if (this.idleProgress >= 100) {
+                        this.idleProgress = 0;
+                        this.completeGather();
+                    }
+
+                    this.updateIdleUI(effTime);
+                }, tickInterval);
+
+                this.saveGameState();
+            },
+
+            completeGather() {
+                const node = this.activeNode;
+                if (!node) return;
+
+                // Calculate XP with quality bonus
+                const xp = Math.round(node.baseXP * QUALITIES[node.quality].multiplier);
+                
+                this.addXP(node.skill, xp);
+                this.addToInventory(node.resource, node.icon);
+
+                this.idleStats.totalXP += xp;
+                this.idleStats.totalItems += 1;
+
+                // Visual feedback
+                this.showResourceDrop(node.icon);
+                this.showXPDrop(xp);
+
+                this.updateUI();
+            },
+
+            updateIdleUI(cycleTime) {
+                document.getElementById('idle-progress-fill').style.width = this.idleProgress + '%';
+                document.getElementById('idle-timer').textContent = ((cycleTime * (100 - this.idleProgress) / 100) / 1000).toFixed(1) + 's';
+
+                document.getElementById('idle-total-xp').textContent = this.idleStats.totalXP.toLocaleString();
+                document.getElementById('idle-total-items').textContent = this.idleStats.totalItems;
+
+                const elapsed = (Date.now() - this.idleStats.startTime) / 1000 / 60 / 60; // hours
+                const xpRate = elapsed > 0 ? Math.round(this.idleStats.totalXP / elapsed) : 0;
+                document.getElementById('idle-xp-rate').textContent = xpRate.toLocaleString() + '/hr';
+            },
+
+            stopIdle() {
+                if (this.idleInterval) clearInterval(this.idleInterval);
+                this.isIdling = false;
+                this.activeNode = null;
+                this.idleProgress = 0;
+
+                document.getElementById('idle-panel').classList.remove('visible');
+                this.checkNearbyNodes();
+            },
+
+            addXP(skill, amount) {
+                if (!this.player.skills[skill]) return;
+
+                const oldLevel = this.player.skills[skill].level;
+                this.player.skills[skill].xp += amount;
+
+                const newLevel = this.calculateLevel(this.player.skills[skill].xp);
+                if (newLevel > oldLevel) {
+                    this.player.skills[skill].level = newLevel;
+                    this.showLevelUp(skill, newLevel);
+                }
+
+                this.updateSkillBars();
+            },
+
+            calculateLevel(xp) {
+                for (let i = XP_TABLE.length - 1; i >= 0; i--) {
+                    if (xp >= XP_TABLE[i]) return i + 1;
+                }
+                return 1;
+            },
+
+            getXPProgress(skill) {
+                const xp = this.player.skills[skill].xp;
+                const lvl = this.player.skills[skill].level;
+                if (lvl >= 99) return 100;
+                const curr = XP_TABLE[lvl - 1] || 0;
+                const next = XP_TABLE[lvl] || 0;
+                return ((xp - curr) / (next - curr)) * 100;
+            },
+
+            addToInventory(name, icon) {
+                const existing = this.player.inventory.find(i => i.name === name);
+                if (existing) {
+                    existing.count++;
+                } else if (this.player.inventory.length < this.player.maxInventory) {
+                    this.player.inventory.push({ name, icon, count: 1 });
+                }
+                this.updateInventoryUI();
+            },
+
+            showXPDrop(amount) {
+                const drop = document.createElement('div');
+                drop.className = 'xp-drop';
+                drop.textContent = `+${amount} XP`;
+                drop.style.left = '50%';
+                drop.style.top = '35%';
+                drop.style.transform = 'translateX(-50%)';
+                document.getElementById('game-container').appendChild(drop);
+                setTimeout(() => drop.remove(), 2000);
+            },
+
+            showResourceDrop(icon) {
+                const drop = document.createElement('div');
+                drop.className = 'resource-drop';
+                drop.textContent = icon;
+                drop.style.left = `${45 + Math.random() * 10}%`;
+                drop.style.top = '40%';
+                document.getElementById('game-container').appendChild(drop);
+                setTimeout(() => drop.remove(), 1500);
+            },
+
+            showNotification(text, subtext = '') {
+                const n = document.getElementById('notification');
+                document.getElementById('notif-text').textContent = text;
+                document.getElementById('notif-subtext').textContent = subtext;
+                n.classList.add('visible');
+                setTimeout(() => n.classList.remove('visible'), 2500);
+            },
+
+            showLevelUp(skill, level) {
+                const icons = { mining: '⛏️', woodcutting: '🪓', fishing: '🎣' };
+                document.getElementById('level-up-icon').textContent = icons[skill] || '⭐';
+                document.getElementById('level-up-skill').textContent = skill.charAt(0).toUpperCase() + skill.slice(1);
+                document.getElementById('level-up-level').textContent = level;
+                document.getElementById('level-up-modal').classList.add('visible');
+            },
+
+            initInventory() {
+                const grid = document.getElementById('inventory-grid');
+                grid.innerHTML = '';
+                for (let i = 0; i < this.player.maxInventory; i++) {
+                    const slot = document.createElement('div');
+                    slot.className = 'inventory-slot';
+                    grid.appendChild(slot);
+                }
+            },
+
+            updateInventoryUI() {
+                const slots = document.querySelectorAll('.inventory-slot');
+                let totalItems = 0;
+                slots.forEach((slot, i) => {
+                    const item = this.player.inventory[i];
+                    if (item) {
+                        slot.className = 'inventory-slot filled';
+                        slot.innerHTML = `<div class="item-icon">${item.icon}</div>${item.count > 1 ? `<div class="item-count">${item.count}</div>` : ''}`;
+                        totalItems += item.count;
+                    } else {
+                        slot.className = 'inventory-slot';
+                        slot.innerHTML = '';
+                    }
+                });
+                document.getElementById('total-items').textContent = totalItems;
+            },
+
+            updateSkillBars() {
+                ['mining', 'woodcutting', 'fishing'].forEach(skill => {
+                    document.getElementById(`${skill}-level`).textContent = this.player.skills[skill].level;
+                    document.getElementById(`${skill}-xp-bar`).style.width = this.getXPProgress(skill) + '%';
+                });
+            },
+
+            updateNodesCount() {
+                const count = Object.keys(this.player.discoveredNodes).length;
+                document.getElementById('nodes-discovered').textContent = count;
+                
+                const badge = document.getElementById('nodes-badge');
+                if (count > 0) {
+                    badge.style.display = 'block';
+                    badge.textContent = count;
+                }
+            },
+
+            updateNodesPanel() {
+                const grid = document.getElementById('nodes-grid');
+                grid.innerHTML = '';
+
+                const nodes = Object.values(this.player.discoveredNodes)
+                    .sort((a, b) => QUALITIES[b.quality].multiplier - QUALITIES[a.quality].multiplier);
+
+                nodes.forEach(node => {
+                    const div = document.createElement('div');
+                    div.className = `discovered-node ${this.activeNode?.cellKey === node.cellKey ? 'active' : ''}`;
+                    div.innerHTML = `
+                        <div class="discovered-node-header">
+                            <span class="discovered-node-icon">${node.icon}</span>
+                            <span class="discovered-node-name">${node.name}</span>
+                            <span class="discovered-node-quality" style="background:${QUALITIES[node.quality].color}">${QUALITIES[node.quality].name[0]}</span>
+                        </div>
+                        <div class="discovered-node-stats">
+                            <span>Lv.${node.level}</span>
+                            <span>${Math.round(node.efficiency * 100)}% eff</span>
+                        </div>
+                    `;
+                    div.addEventListener('click', () => this.startIdleFromDiscovered(node));
+                    grid.appendChild(div);
+                });
+            },
+
+            updateUI() {
+                document.getElementById('hp-display').textContent = `${this.player.hp}/${this.player.maxHp}`;
+                document.getElementById('combat-display').textContent = this.player.combatLevel;
+                document.getElementById('gold-display').textContent = this.player.gold.toLocaleString();
+                this.updateSkillBars();
+                this.updateInventoryUI();
+                this.updateNodesCount();
+            },
+
+            initControls() {
+                document.getElementById('idle-close').addEventListener('click', () => this.stopIdle());
+                document.getElementById('nodes-close').addEventListener('click', () => document.getElementById('nodes-panel').classList.remove('visible'));
+                document.getElementById('inventory-close').addEventListener('click', () => document.getElementById('inventory-panel').classList.remove('visible'));
+                document.getElementById('level-up-close').addEventListener('click', () => document.getElementById('level-up-modal').classList.remove('visible'));
+
+                document.querySelectorAll('.nav-item').forEach(item => {
+                    item.addEventListener('click', () => {
+                        const panel = item.dataset.panel;
+                        document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+                        item.classList.add('active');
+
+                        document.getElementById('nodes-panel').classList.remove('visible');
+                        document.getElementById('inventory-panel').classList.remove('visible');
+
+                        if (panel === 'nodes') {
+                            this.updateNodesPanel();
+                            document.getElementById('nodes-panel').classList.add('visible');
+                        } else if (panel === 'inventory') {
+                            document.getElementById('inventory-panel').classList.add('visible');
+                        }
+                    });
+                });
+
+                this.map.on('rotate', () => {
+                    document.getElementById('compass-needle').style.transform = `rotate(${-this.map.getBearing()}deg)`;
+                });
+            },
+
+            saveGameState() {
+                localStorage.setItem('osrs_go_save', JSON.stringify({
+                    skills: this.player.skills,
+                    inventory: this.player.inventory,
+                    gold: this.player.gold,
+                    discoveredNodes: this.player.discoveredNodes
+                }));
+            },
+
+            loadGameState() {
+                const saved = localStorage.getItem('osrs_go_save');
+                if (saved) {
+                    const s = JSON.parse(saved);
+                    this.player.skills = s.skills || this.player.skills;
+                    this.player.inventory = s.inventory || [];
+                    this.player.gold = s.gold || 0;
+                    this.player.discoveredNodes = s.discoveredNodes || {};
+                }
+            },
+
+            getDistance(lat1, lng1, lat2, lng2) {
+                return Math.sqrt(Math.pow(lat2 - lat1, 2) + Math.pow(lng2 - lng1, 2));
+            },
+
+            hashCode(str) {
+                let h = 0;
+                for (let i = 0; i < str.length; i++) h = ((h << 5) - h) + str.charCodeAt(i);
+                return Math.abs(h);
+            },
+
+            seededRandom(seed) {
+                return () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
+            }
+        };
+
+        function startGame() {
+            if (typeof mapboxgl !== 'undefined') Game.init();
+            else setTimeout(startGame, 100);
+        }
+
+        document.addEventListener('DOMContentLoaded', startGame);
+    </script>
+</body>
+</html>
