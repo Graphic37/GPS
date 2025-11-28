@@ -79,6 +79,11 @@
 
         /* Focus btn */
         #focus-btn { position: absolute; bottom: 170px; right: 10px; z-index: 1000; width: 46px; height: 46px; background: var(--panel-bg); border: 3px solid var(--gold-dark); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; cursor: pointer; box-shadow: 0 3px 10px rgba(0,0,0,0.5); }
+        #test-btn { position: absolute; bottom: 225px; right: 10px; z-index: 1000; width: 46px; height: 46px; background: var(--panel-bg); border: 3px solid #e91e63; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; cursor: pointer; box-shadow: 0 3px 10px rgba(0,0,0,0.5); }
+        #test-btn.active { background: rgba(233, 30, 99, 0.3); border-color: #ff4081; box-shadow: 0 0 15px rgba(233, 30, 99, 0.5); }
+        #test-indicator { position: absolute; top: 50px; left: 50%; transform: translateX(-50%); z-index: 1001; background: rgba(233, 30, 99, 0.9); color: #fff; padding: 8px 16px; border-radius: 20px; font-size: 0.8rem; display: none; }
+        #test-indicator.show { display: block; animation: pulse 1s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
 
         /* Action btn */
         #action-btn { position: absolute; bottom: 95px; left: 50%; transform: translateX(-50%); z-index: 1000; padding: 12px 32px; font-family: 'Cinzel', serif; font-size: 1rem; font-weight: 700; color: #fff; background: linear-gradient(180deg, #4caf50, #2e7d32, #1b5e20); border: 3px solid #1b5e20; border-radius: 10px; box-shadow: 0 4px 14px rgba(0,0,0,0.5); cursor: pointer; display: none; }
@@ -190,8 +195,10 @@
 <div id="game">
     <div id="map"></div>
     <div id="gps"><div class="gps-dot" id="gps-dot"></div><span id="gps-txt">GPS...</span></div>
+    <div id="test-indicator">🧪 TAP MAP TO TELEPORT</div>
     <div id="disc-badge"><span class="icon">📍</span><span class="ct" id="node-ct">0</span></div>
     <button id="focus-btn">📍</button>
+    <button id="test-btn">🧪</button>
     <button id="action-btn">Gather</button>
 
     <div id="nav">
@@ -480,6 +487,7 @@ const G = {
     GRID: 0.00035,
     DISC_R: 0.00015,
     INT_R: 0.0002,
+    testMode: false,
 
     init() {
         // Init all skills
@@ -1064,6 +1072,25 @@ const G = {
             if (this.player.pos) this.map.easeTo({ center: [this.player.pos.lng, this.player.pos.lat], duration: 500 });
         });
 
+        // Test mode toggle
+        document.getElementById('test-btn').addEventListener('click', () => {
+            this.testMode = !this.testMode;
+            document.getElementById('test-btn').classList.toggle('active', this.testMode);
+            document.getElementById('test-indicator').classList.toggle('show', this.testMode);
+            if (this.testMode) {
+                this.notify('Test Mode ON', 'Tap map to teleport');
+            } else {
+                this.notify('Test Mode OFF', '');
+            }
+        });
+
+        // Map click for teleport in test mode
+        this.map.on('click', (e) => {
+            if (!this.testMode) return;
+            const { lng, lat } = e.lngLat;
+            this.teleport(lat, lng);
+        });
+
         document.querySelectorAll('.panel-close').forEach(btn => {
             btn.addEventListener('click', () => {
                 const panel = btn.dataset.close;
@@ -1130,6 +1157,17 @@ const G = {
             if (s.inv) this.player.inv = s.inv;
             if (s.discovered) this.player.discovered = s.discovered;
         }
+    },
+
+    teleport(lat, lng) {
+        this.player.pos = { lat, lng };
+        this.playerMarker.setLngLat([lng, lat]);
+        this.map.easeTo({ center: [lng, lat], duration: 300 });
+        this.discoverNodes(lat, lng);
+        this.checkInteract();
+        this.renderNodes();
+        this.save();
+        this.notify('Teleported!', `${lat.toFixed(4)}, ${lng.toFixed(4)}`);
     },
 
     dist(lat1, lng1, lat2, lng2) {
