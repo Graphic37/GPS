@@ -1,0 +1,1157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>OSRS GO</title>
+    
+    <script src="https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.js"></script>
+    <link href="https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.css" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=MedievalSharp&display=swap" rel="stylesheet">
+    
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        :root {
+            --gold: #ffd700; --gold-dark: #b8860b; --brown: #3d2914; --brown-light: #5c3d1e;
+            --text-orange: #ff981f; --panel-bg: rgba(61, 41, 20, 0.97);
+        }
+        html, body { height: 100%; width: 100%; overflow: hidden; font-family: 'MedievalSharp', cursive; background: #0a0a0a; }
+
+        /* Loading */
+        #loading { position: fixed; inset: 0; background: radial-gradient(ellipse, #1a1510, #0d0805); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 10000; transition: opacity 0.5s; }
+        #loading.hidden { opacity: 0; pointer-events: none; }
+        .load-logo { font-family: 'Cinzel', serif; font-size: clamp(2rem, 8vw, 3.5rem); font-weight: 900; background: linear-gradient(180deg, #ffd700, #b8860b); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 0.5rem; }
+        .load-sub { color: var(--text-orange); font-size: 0.9rem; margin-bottom: 2rem; }
+        .load-bar-wrap { width: min(80%, 280px); height: 24px; background: #0a0a0a; border: 3px solid var(--brown); border-radius: 4px; overflow: hidden; }
+        .load-bar { height: 100%; width: 0%; background: linear-gradient(180deg, #5cb85c, #2d662d); transition: width 0.3s; }
+        .load-text { color: #666; font-size: 0.8rem; margin-top: 1rem; }
+
+        /* Game */
+        #game { position: relative; width: 100%; height: 100%; }
+        #map { width: 100%; height: 100%; }
+        .mapboxgl-ctrl-logo, .mapboxgl-ctrl-attrib { display: none !important; }
+
+        /* Player */
+        .player-marker { width: 52px; height: 52px; filter: drop-shadow(0 4px 8px rgba(0,0,0,0.6)); }
+        .player-pulse { position: absolute; inset: -6px; border: 3px solid var(--gold); border-radius: 50%; animation: pulse 2s infinite; opacity: 0; }
+        .player-pulse:nth-child(2) { animation-delay: 0.5s; }
+        @keyframes pulse { 0% { transform: scale(0.7); opacity: 0.7; } 100% { transform: scale(1.3); opacity: 0; } }
+        .player-body { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 36px; height: 36px; background: radial-gradient(circle at 30% 25%, #fff8dc, transparent 20%), radial-gradient(circle, #ffd700, #b8860b 60%); border: 3px solid var(--brown); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px; box-shadow: 0 0 15px rgba(255,215,0,0.5); }
+        .player-arrow { position: absolute; top: 2px; left: 50%; transform: translateX(-50%); border-left: 7px solid transparent; border-right: 7px solid transparent; border-bottom: 12px solid var(--gold); }
+
+        /* Nodes */
+        .node-marker { cursor: pointer; filter: drop-shadow(0 3px 6px rgba(0,0,0,0.5)); transition: transform 0.15s; }
+        .node-marker:active { transform: scale(0.93); }
+        .node-wrap { position: relative; width: 44px; height: 54px; }
+        .node-glow { position: absolute; top: 2px; left: 50%; transform: translateX(-50%); width: 46px; height: 46px; border-radius: 50%; opacity: 0.4; animation: glow 2s infinite; }
+        @keyframes glow { 0%, 100% { transform: translateX(-50%) scale(1); opacity: 0.3; } 50% { transform: translateX(-50%) scale(1.1); opacity: 0.5; } }
+        .node-icon { width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 22px; border: 3px solid; box-shadow: 0 2px 8px rgba(0,0,0,0.4), inset 0 -2px 4px rgba(0,0,0,0.3); }
+        .node-badge { position: absolute; top: -2px; right: -2px; width: 16px; height: 16px; border-radius: 50%; font-size: 8px; font-weight: bold; color: #fff; display: flex; align-items: center; justify-content: center; }
+        .node-label { position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.85); padding: 1px 5px; border-radius: 3px; font-size: 7px; color: var(--gold); font-family: 'Cinzel', serif; white-space: nowrap; }
+
+        /* Quality colors */
+        .q-common .node-icon { background: linear-gradient(180deg, #9e9e9e, #616161); border-color: #757575; }
+        .q-common .node-glow { background: radial-gradient(circle, #9e9e9e, transparent 70%); }
+        .q-common .node-badge { background: #616161; }
+        .q-uncommon .node-icon { background: linear-gradient(180deg, #66bb6a, #2e7d32); border-color: #4caf50; }
+        .q-uncommon .node-glow { background: radial-gradient(circle, #4caf50, transparent 70%); }
+        .q-uncommon .node-badge { background: #2e7d32; }
+        .q-rare .node-icon { background: linear-gradient(180deg, #64b5f6, #1565c0); border-color: #2196f3; }
+        .q-rare .node-glow { background: radial-gradient(circle, #2196f3, transparent 70%); }
+        .q-rare .node-badge { background: #1565c0; }
+        .q-epic .node-icon { background: linear-gradient(180deg, #ba68c8, #6a1b9a); border-color: #9c27b0; }
+        .q-epic .node-glow { background: radial-gradient(circle, #9c27b0, transparent 70%); }
+        .q-epic .node-badge { background: #6a1b9a; }
+        .q-legendary .node-icon { background: linear-gradient(180deg, #ffcc80, #e65100); border-color: #ff9800; animation: legPulse 2s infinite; }
+        .q-legendary .node-glow { background: radial-gradient(circle, #ff9800, transparent 70%); animation: glow 1s infinite; }
+        .q-legendary .node-badge { background: linear-gradient(135deg, #ff9800, #ff5722); }
+        @keyframes legPulse { 0%, 100% { box-shadow: 0 2px 8px rgba(0,0,0,0.4), 0 0 12px rgba(255,152,0,0.5); } 50% { box-shadow: 0 2px 8px rgba(0,0,0,0.4), 0 0 20px rgba(255,152,0,0.8); } }
+
+        /* Top UI */
+        #gps { position: absolute; top: 10px; left: 10px; z-index: 1000; background: rgba(0,0,0,0.7); padding: 6px 10px; border-radius: 16px; display: flex; align-items: center; gap: 6px; font-size: 0.7rem; color: #888; }
+        .gps-dot { width: 8px; height: 8px; border-radius: 50%; background: #888; }
+        .gps-dot.on { background: #4caf50; box-shadow: 0 0 6px rgba(76,175,80,0.8); }
+        .gps-dot.err { background: #f44336; }
+        #disc-badge { position: absolute; top: 10px; right: 10px; z-index: 1000; background: var(--panel-bg); border: 2px solid var(--gold-dark); padding: 6px 12px; border-radius: 16px; display: flex; align-items: center; gap: 6px; }
+        #disc-badge .icon { font-size: 14px; }
+        #disc-badge .ct { font-family: 'Cinzel', serif; font-weight: 700; color: var(--gold); font-size: 0.95rem; }
+
+        /* Focus btn */
+        #focus-btn { position: absolute; bottom: 170px; right: 10px; z-index: 1000; width: 46px; height: 46px; background: var(--panel-bg); border: 3px solid var(--gold-dark); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; cursor: pointer; box-shadow: 0 3px 10px rgba(0,0,0,0.5); }
+
+        /* Action btn */
+        #action-btn { position: absolute; bottom: 95px; left: 50%; transform: translateX(-50%); z-index: 1000; padding: 12px 32px; font-family: 'Cinzel', serif; font-size: 1rem; font-weight: 700; color: #fff; background: linear-gradient(180deg, #4caf50, #2e7d32, #1b5e20); border: 3px solid #1b5e20; border-radius: 10px; box-shadow: 0 4px 14px rgba(0,0,0,0.5); cursor: pointer; display: none; }
+
+        /* Bottom nav */
+        #nav { position: absolute; bottom: 0; left: 0; right: 0; z-index: 1000; background: linear-gradient(180deg, rgba(61,41,20,0.98), rgba(20,14,8,0.98)); border-top: 3px solid var(--gold-dark); padding: 6px 0; padding-bottom: max(6px, env(safe-area-inset-bottom)); }
+        .nav-row { display: flex; justify-content: space-around; }
+        .nav-btn { display: flex; flex-direction: column; align-items: center; gap: 1px; color: var(--text-orange); font-size: 0.55rem; text-transform: uppercase; cursor: pointer; padding: 4px 10px; border-radius: 6px; position: relative; }
+        .nav-btn.on { color: var(--gold); }
+        .nav-btn::before { content: ''; position: absolute; top: -3px; left: 50%; transform: translateX(-50%) scaleX(0); width: 20px; height: 3px; background: var(--gold); border-radius: 2px; transition: transform 0.2s; }
+        .nav-btn.on::before { transform: translateX(-50%) scaleX(1); }
+        .nav-icon { font-size: 1.3rem; }
+        .nav-badge { position: absolute; top: 0; right: 2px; background: #e53935; color: #fff; font-size: 0.5rem; padding: 1px 4px; border-radius: 6px; }
+
+        /* Panels */
+        .panel { position: absolute; bottom: 65px; left: 6px; right: 6px; z-index: 999; background: var(--panel-bg); border: 3px solid var(--gold-dark); border-radius: 10px; padding: 12px; display: none; max-height: 52vh; overflow-y: auto; }
+        .panel.open { display: block; animation: slideUp 0.25s ease; }
+        @keyframes slideUp { from { transform: translateY(15px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .panel-hdr { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 2px solid rgba(255,215,0,0.2); }
+        .panel-title { font-family: 'Cinzel', serif; font-size: 1rem; font-weight: 700; color: var(--gold); }
+        .panel-close { width: 26px; height: 26px; background: rgba(139,0,0,0.8); border: 2px solid #ff4444; border-radius: 5px; color: #fff; font-size: 0.9rem; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+
+        /* Tabs */
+        .tabs { display: flex; gap: 4px; margin-bottom: 10px; flex-wrap: wrap; }
+        .tab { padding: 6px 12px; background: rgba(0,0,0,0.4); border: 2px solid rgba(255,215,0,0.2); border-radius: 6px; color: #aaa; font-size: 0.7rem; cursor: pointer; transition: all 0.2s; }
+        .tab.on { background: rgba(255,215,0,0.15); border-color: var(--gold); color: var(--gold); }
+
+        /* Skills */
+        .skill-row { display: flex; align-items: center; gap: 10px; background: rgba(0,0,0,0.3); padding: 8px 10px; border-radius: 6px; margin-bottom: 6px; }
+        .skill-icon { font-size: 20px; width: 28px; text-align: center; }
+        .skill-info { flex: 1; }
+        .skill-hdr { display: flex; justify-content: space-between; font-size: 0.7rem; margin-bottom: 3px; }
+        .skill-name { color: var(--text-orange); text-transform: uppercase; }
+        .skill-lvl { color: var(--gold); font-family: 'Cinzel', serif; font-weight: 700; }
+        .skill-bar { height: 5px; background: rgba(0,0,0,0.5); border-radius: 3px; overflow: hidden; }
+        .skill-fill { height: 100%; background: linear-gradient(90deg, #4caf50, #8bc34a); transition: width 0.3s; }
+        .skill-xp { font-size: 0.55rem; color: #888; margin-top: 2px; }
+
+        /* Inventory */
+        .inv-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
+        .inv-slot { aspect-ratio: 1; background: rgba(0,0,0,0.5); border: 2px solid rgba(255,215,0,0.2); border-radius: 5px; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; cursor: pointer; }
+        .inv-slot.filled { border-color: var(--gold-dark); }
+        .inv-slot:active { background: rgba(255,215,0,0.1); }
+        .inv-icon { font-size: 1.4rem; }
+        .inv-ct { position: absolute; bottom: 1px; right: 3px; font-family: 'Cinzel', serif; font-size: 0.6rem; font-weight: 700; color: var(--gold); text-shadow: 1px 1px 1px #000; }
+
+        /* Nodes list */
+        .nodes-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 6px; }
+        .node-card { background: rgba(0,0,0,0.4); border: 2px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 8px; cursor: pointer; }
+        .node-card:active { border-color: var(--gold); background: rgba(255,215,0,0.1); }
+        .node-card.active { border-color: #4caf50; background: rgba(76,175,80,0.2); }
+        .node-card-hdr { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+        .node-card-icon { font-size: 18px; }
+        .node-card-name { font-size: 0.75rem; color: #fff; flex: 1; }
+        .node-card-q { font-size: 0.5rem; padding: 2px 4px; border-radius: 3px; color: #fff; text-transform: uppercase; }
+        .node-card-stats { display: flex; justify-content: space-between; font-size: 0.6rem; color: #888; }
+        .node-card-stats span { color: var(--gold); }
+
+        /* Idle panel */
+        .idle-info { display: flex; align-items: center; gap: 10px; padding: 8px; background: rgba(0,0,0,0.3); border-radius: 6px; margin-bottom: 10px; }
+        .idle-icon { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; border: 3px solid; }
+        .idle-details { flex: 1; }
+        .idle-name { font-family: 'Cinzel', serif; font-size: 0.95rem; color: #fff; }
+        .idle-meta { font-size: 0.7rem; color: #aaa; }
+        .idle-meta span { font-weight: bold; }
+        .idle-prog { margin-bottom: 10px; }
+        .idle-prog-hdr { display: flex; justify-content: space-between; font-size: 0.7rem; color: #aaa; margin-bottom: 3px; }
+        .idle-bar { height: 18px; background: rgba(0,0,0,0.5); border-radius: 5px; overflow: hidden; border: 2px solid var(--brown-light); }
+        .idle-fill { height: 100%; background: linear-gradient(180deg, #4caf50, #2e7d32); transition: width 0.1s; }
+        .idle-stats { display: flex; justify-content: space-around; text-align: center; }
+        .idle-val { font-family: 'Cinzel', serif; font-size: 1rem; font-weight: bold; }
+        .idle-val.xp { color: #7cfc00; }
+        .idle-val.items { color: var(--gold); }
+        .idle-val.rate { color: #64b5f6; }
+        .idle-lbl { font-size: 0.55rem; color: #888; text-transform: uppercase; }
+
+        /* Drops */
+        .xp-drop { position: absolute; z-index: 1500; font-family: 'Cinzel', serif; font-weight: 700; font-size: 1rem; color: #7cfc00; text-shadow: 1px 1px 0 #000, -1px -1px 0 #000; pointer-events: none; animation: floatUp 1.8s ease-out forwards; }
+        .res-drop { position: absolute; z-index: 1500; font-size: 1.2rem; pointer-events: none; animation: resPop 1.3s ease-out forwards; }
+        @keyframes floatUp { 0% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-60px); } }
+        @keyframes resPop { 0% { opacity: 0; transform: scale(0.5) translateY(0); } 20% { opacity: 1; transform: scale(1.1) translateY(-10px); } 100% { opacity: 0; transform: scale(1) translateY(-40px); } }
+
+        /* Notif */
+        #notif { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 2000; background: var(--panel-bg); border: 3px solid var(--gold); border-radius: 10px; padding: 18px 28px; text-align: center; opacity: 0; pointer-events: none; transition: opacity 0.3s; }
+        #notif.show { opacity: 1; }
+        .notif-txt { font-family: 'Cinzel', serif; font-size: 1.1rem; font-weight: 700; color: var(--gold); }
+        .notif-sub { font-size: 0.85rem; color: var(--text-orange); margin-top: 3px; }
+
+        /* Level up */
+        #lvlup { position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 3000; display: none; align-items: center; justify-content: center; }
+        #lvlup.show { display: flex; }
+        .lvlup-box { background: var(--panel-bg); border: 4px solid var(--gold); border-radius: 14px; padding: 28px 40px; text-align: center; animation: pop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        @keyframes pop { 0% { transform: scale(0.5); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+        .lvlup-icon { font-size: 3.5rem; margin-bottom: 6px; }
+        .lvlup-title { font-family: 'Cinzel', serif; font-size: 1.6rem; font-weight: 900; background: linear-gradient(180deg, #ffd700, #ff9800); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .lvlup-skill { color: var(--text-orange); font-size: 1rem; text-transform: uppercase; margin: 4px 0; }
+        .lvlup-num { font-family: 'Cinzel', serif; font-size: 3rem; font-weight: 900; color: #fff; }
+        .lvlup-btn { margin-top: 16px; padding: 8px 28px; font-family: 'Cinzel', serif; font-size: 0.9rem; font-weight: 700; color: #fff; background: linear-gradient(180deg, #4caf50, #2e7d32); border: 3px solid #1b5e20; border-radius: 6px; cursor: pointer; }
+    </style>
+</head>
+<body>
+<div id="loading">
+    <div class="load-logo">OSRS GO</div>
+    <div class="load-sub">Free-to-Play Edition</div>
+    <div class="load-bar-wrap"><div class="load-bar" id="load-bar"></div></div>
+    <div class="load-text" id="load-text">Loading...</div>
+</div>
+
+<div id="game">
+    <div id="map"></div>
+    <div id="gps"><div class="gps-dot" id="gps-dot"></div><span id="gps-txt">GPS...</span></div>
+    <div id="disc-badge"><span class="icon">📍</span><span class="ct" id="node-ct">0</span></div>
+    <button id="focus-btn">📍</button>
+    <button id="action-btn">Gather</button>
+
+    <div id="nav">
+        <div class="nav-row">
+            <div class="nav-btn on" data-p="map"><div class="nav-icon">🗺️</div><span>Map</span></div>
+            <div class="nav-btn" data-p="nodes"><div class="nav-icon">📍</div><span>Nodes</span><div class="nav-badge" id="nodes-badge" style="display:none">0</div></div>
+            <div class="nav-btn" data-p="skills"><div class="nav-icon">📊</div><span>Skills</span></div>
+            <div class="nav-btn" data-p="inv"><div class="nav-icon">🎒</div><span>Bag</span></div>
+            <div class="nav-btn" data-p="craft"><div class="nav-icon">🔨</div><span>Craft</span></div>
+        </div>
+    </div>
+
+    <!-- Nodes Panel -->
+    <div class="panel" id="nodes-panel">
+        <div class="panel-hdr"><div class="panel-title">📍 Discovered Nodes</div><button class="panel-close" data-close="nodes-panel">×</button></div>
+        <div class="tabs" id="node-tabs"></div>
+        <div class="nodes-grid" id="nodes-grid"></div>
+    </div>
+
+    <!-- Skills Panel -->
+    <div class="panel" id="skills-panel">
+        <div class="panel-hdr"><div class="panel-title">📊 Skills</div><button class="panel-close" data-close="skills-panel">×</button></div>
+        <div id="skills-list"></div>
+    </div>
+
+    <!-- Inventory Panel -->
+    <div class="panel" id="inv-panel">
+        <div class="panel-hdr"><div class="panel-title">🎒 Inventory</div><button class="panel-close" data-close="inv-panel">×</button></div>
+        <div class="inv-grid" id="inv-grid"></div>
+    </div>
+
+    <!-- Crafting Panel -->
+    <div class="panel" id="craft-panel">
+        <div class="panel-hdr"><div class="panel-title">🔨 Crafting</div><button class="panel-close" data-close="craft-panel">×</button></div>
+        <div class="tabs" id="craft-tabs"></div>
+        <div id="recipes-list"></div>
+    </div>
+
+    <!-- Idle Panel -->
+    <div class="panel" id="idle-panel">
+        <div class="panel-hdr"><div class="panel-title">⚒️ Gathering</div><button class="panel-close" id="idle-close">×</button></div>
+        <div class="idle-info">
+            <div class="idle-icon" id="idle-icon">🪨</div>
+            <div class="idle-details">
+                <div class="idle-name" id="idle-name">Node</div>
+                <div class="idle-meta"><span id="idle-q">Common</span> • <span id="idle-eff">100%</span> eff</div>
+            </div>
+        </div>
+        <div class="idle-prog">
+            <div class="idle-prog-hdr"><span id="idle-action">Gathering...</span><span id="idle-timer">0.0s</span></div>
+            <div class="idle-bar"><div class="idle-fill" id="idle-fill"></div></div>
+        </div>
+        <div class="idle-stats">
+            <div><div class="idle-val xp" id="idle-xp">0</div><div class="idle-lbl">XP</div></div>
+            <div><div class="idle-val items" id="idle-items">0</div><div class="idle-lbl">Items</div></div>
+            <div><div class="idle-val rate" id="idle-rate">0/hr</div><div class="idle-lbl">Rate</div></div>
+        </div>
+    </div>
+
+    <div id="notif"><div class="notif-txt" id="notif-txt"></div><div class="notif-sub" id="notif-sub"></div></div>
+    <div id="lvlup"><div class="lvlup-box"><div class="lvlup-icon" id="lvl-icon">⛏️</div><div class="lvlup-title">LEVEL UP!</div><div class="lvlup-skill" id="lvl-skill">Mining</div><div class="lvlup-num" id="lvl-num">2</div><button class="lvlup-btn" id="lvl-close">Continue</button></div></div>
+</div>
+
+<script>
+// =====================================================
+// COMPLETE F2P OSRS DATA
+// =====================================================
+
+const QUALITIES = {
+    common: { name: 'Common', color: '#9e9e9e', mult: 1.0, weight: 50 },
+    uncommon: { name: 'Uncommon', color: '#4caf50', mult: 1.25, weight: 30 },
+    rare: { name: 'Rare', color: '#2196f3', mult: 1.5, weight: 15 },
+    epic: { name: 'Epic', color: '#9c27b0', mult: 2.0, weight: 4 },
+    legendary: { name: 'Legendary', color: '#ff9800', mult: 3.0, weight: 1 }
+};
+
+// F2P Skills with icons
+const SKILLS = {
+    attack: { name: 'Attack', icon: '⚔️' },
+    strength: { name: 'Strength', icon: '💪' },
+    defence: { name: 'Defence', icon: '🛡️' },
+    ranged: { name: 'Ranged', icon: '🏹' },
+    prayer: { name: 'Prayer', icon: '✨' },
+    magic: { name: 'Magic', icon: '🔮' },
+    runecraft: { name: 'Runecraft', icon: '🔷' },
+    hitpoints: { name: 'Hitpoints', icon: '❤️' },
+    crafting: { name: 'Crafting', icon: '💍' },
+    mining: { name: 'Mining', icon: '⛏️' },
+    smithing: { name: 'Smithing', icon: '🔨' },
+    fishing: { name: 'Fishing', icon: '🎣' },
+    cooking: { name: 'Cooking', icon: '🍳' },
+    firemaking: { name: 'Firemaking', icon: '🔥' },
+    woodcutting: { name: 'Woodcutting', icon: '🪓' }
+};
+
+// F2P Mining Rocks
+const MINING_NODES = {
+    clay: { icon: 'ite', name: 'Clay', lvl: 1, xp: 5, time: 1500, res: 'Clay', weight: 8 },
+    rune_essence: { icon: '🔮', name: 'Rune Essence', lvl: 1, xp: 5, time: 1500, res: 'Rune essence', weight: 6 },
+    copper: { icon: '🟤', name: 'Copper', lvl: 1, xp: 17.5, time: 2400, res: 'Copper ore', weight: 15 },
+    tin: { icon: '⚪', name: 'Tin', lvl: 1, xp: 17.5, time: 2400, res: 'Tin ore', weight: 15 },
+    iron: { icon: '🟫', name: 'Iron', lvl: 15, xp: 35, time: 3600, res: 'Iron ore', weight: 12 },
+    silver: { icon: '🥈', name: 'Silver', lvl: 20, xp: 40, time: 4200, res: 'Silver ore', weight: 5 },
+    coal: { icon: '⬛', name: 'Coal', lvl: 30, xp: 50, time: 5400, res: 'Coal', weight: 10 },
+    gold: { icon: '🥇', name: 'Gold', lvl: 40, xp: 65, time: 6000, res: 'Gold ore', weight: 4 },
+    mithril: { icon: '🔵', name: 'Mithril', lvl: 55, xp: 80, time: 7200, res: 'Mithril ore', weight: 3 },
+    adamantite: { icon: '🟢', name: 'Adamantite', lvl: 70, xp: 95, time: 9000, res: 'Adamantite ore', weight: 2 },
+    runite: { icon: '🔷', name: 'Runite', lvl: 85, xp: 125, time: 12000, res: 'Runite ore', weight: 1 }
+};
+
+// F2P Woodcutting Trees
+const WC_NODES = {
+    tree: { icon: '🌲', name: 'Tree', lvl: 1, xp: 25, time: 2000, res: 'Logs', weight: 25 },
+    oak: { icon: '🌳', name: 'Oak', lvl: 15, xp: 37.5, time: 3000, res: 'Oak logs', weight: 18 },
+    willow: { icon: '🌴', name: 'Willow', lvl: 30, xp: 67.5, time: 4000, res: 'Willow logs', weight: 12 },
+    maple: { icon: '🍁', name: 'Maple', lvl: 45, xp: 100, time: 5500, res: 'Maple logs', weight: 6 },
+    yew: { icon: '🎄', name: 'Yew', lvl: 60, xp: 175, time: 8000, res: 'Yew logs', weight: 3 }
+};
+
+// F2P Fishing Spots
+const FISH_NODES = {
+    shrimp: { icon: '🦐', name: 'Shrimp/Anchovies', lvl: 1, xp: 10, time: 1800, res: 'Raw shrimps', weight: 20 },
+    sardine: { icon: '🐟', name: 'Sardine/Herring', lvl: 5, xp: 20, time: 2200, res: 'Raw sardine', weight: 15 },
+    trout: { icon: '🐠', name: 'Trout/Salmon', lvl: 20, xp: 50, time: 3500, res: 'Raw trout', weight: 12 },
+    pike: { icon: '🐡', name: 'Pike', lvl: 25, xp: 60, time: 4000, res: 'Raw pike', weight: 8 },
+    tuna: { icon: '🐟', name: 'Tuna/Swordfish', lvl: 35, xp: 80, time: 5000, res: 'Raw tuna', weight: 6 },
+    lobster: { icon: '🦞', name: 'Lobster', lvl: 40, xp: 90, time: 5500, res: 'Raw lobster', weight: 5 },
+    swordfish: { icon: '⚔️🐟', name: 'Swordfish', lvl: 50, xp: 100, time: 6500, res: 'Raw swordfish', weight: 3 }
+};
+
+// All node categories
+const NODE_CATS = {
+    mining: { skill: 'mining', nodes: MINING_NODES, verb: 'Mining' },
+    woodcutting: { skill: 'woodcutting', nodes: WC_NODES, verb: 'Chopping' },
+    fishing: { skill: 'fishing', nodes: FISH_NODES, verb: 'Fishing' }
+};
+
+// F2P Smithing Recipes (bars)
+const SMELTING = {
+    bronze_bar: { name: 'Bronze bar', lvl: 1, xp: 6.2, reqs: { 'Copper ore': 1, 'Tin ore': 1 }, icon: '🟫' },
+    iron_bar: { name: 'Iron bar', lvl: 15, xp: 12.5, reqs: { 'Iron ore': 1 }, icon: '⬜', success: 0.5 },
+    silver_bar: { name: 'Silver bar', lvl: 20, xp: 13.7, reqs: { 'Silver ore': 1 }, icon: '🥈' },
+    steel_bar: { name: 'Steel bar', lvl: 30, xp: 17.5, reqs: { 'Iron ore': 1, 'Coal': 2 }, icon: '⚙️' },
+    gold_bar: { name: 'Gold bar', lvl: 40, xp: 22.5, reqs: { 'Gold ore': 1 }, icon: '🥇' },
+    mithril_bar: { name: 'Mithril bar', lvl: 50, xp: 30, reqs: { 'Mithril ore': 1, 'Coal': 4 }, icon: '🔵' },
+    adamant_bar: { name: 'Adamant bar', lvl: 70, xp: 37.5, reqs: { 'Adamantite ore': 1, 'Coal': 6 }, icon: '🟢' },
+    rune_bar: { name: 'Rune bar', lvl: 85, xp: 50, reqs: { 'Runite ore': 1, 'Coal': 8 }, icon: '🔷' }
+};
+
+// F2P Smithing Items (anvil)
+const SMITHING = {
+    // Bronze
+    bronze_dagger: { name: 'Bronze dagger', lvl: 1, xp: 12.5, bar: 'Bronze bar', bars: 1, icon: '🗡️' },
+    bronze_axe: { name: 'Bronze axe', lvl: 1, xp: 12.5, bar: 'Bronze bar', bars: 1, icon: '🪓' },
+    bronze_mace: { name: 'Bronze mace', lvl: 2, xp: 12.5, bar: 'Bronze bar', bars: 1, icon: '🔨' },
+    bronze_med_helm: { name: 'Bronze med helm', lvl: 3, xp: 12.5, bar: 'Bronze bar', bars: 1, icon: '⛑️' },
+    bronze_sword: { name: 'Bronze sword', lvl: 4, xp: 12.5, bar: 'Bronze bar', bars: 1, icon: '⚔️' },
+    bronze_scimitar: { name: 'Bronze scimitar', lvl: 5, xp: 25, bar: 'Bronze bar', bars: 2, icon: '⚔️' },
+    bronze_longsword: { name: 'Bronze longsword', lvl: 6, xp: 25, bar: 'Bronze bar', bars: 2, icon: '🗡️' },
+    bronze_full_helm: { name: 'Bronze full helm', lvl: 7, xp: 25, bar: 'Bronze bar', bars: 2, icon: '🪖' },
+    bronze_sq_shield: { name: 'Bronze sq shield', lvl: 8, xp: 25, bar: 'Bronze bar', bars: 2, icon: '🛡️' },
+    bronze_kiteshield: { name: 'Bronze kiteshield', lvl: 12, xp: 37.5, bar: 'Bronze bar', bars: 3, icon: '🛡️' },
+    bronze_chainbody: { name: 'Bronze chainbody', lvl: 11, xp: 37.5, bar: 'Bronze bar', bars: 3, icon: '🦺' },
+    bronze_platelegs: { name: 'Bronze platelegs', lvl: 16, xp: 37.5, bar: 'Bronze bar', bars: 3, icon: '👖' },
+    bronze_plateskirt: { name: 'Bronze plateskirt', lvl: 16, xp: 37.5, bar: 'Bronze bar', bars: 3, icon: '👗' },
+    bronze_platebody: { name: 'Bronze platebody', lvl: 18, xp: 62.5, bar: 'Bronze bar', bars: 5, icon: '🦺' },
+    bronze_2h: { name: 'Bronze 2h sword', lvl: 14, xp: 37.5, bar: 'Bronze bar', bars: 3, icon: '⚔️' },
+    
+    // Iron
+    iron_dagger: { name: 'Iron dagger', lvl: 15, xp: 25, bar: 'Iron bar', bars: 1, icon: '🗡️' },
+    iron_axe: { name: 'Iron axe', lvl: 16, xp: 25, bar: 'Iron bar', bars: 1, icon: '🪓' },
+    iron_mace: { name: 'Iron mace', lvl: 17, xp: 25, bar: 'Iron bar', bars: 1, icon: '🔨' },
+    iron_med_helm: { name: 'Iron med helm', lvl: 18, xp: 25, bar: 'Iron bar', bars: 1, icon: '⛑️' },
+    iron_sword: { name: 'Iron sword', lvl: 19, xp: 25, bar: 'Iron bar', bars: 1, icon: '⚔️' },
+    iron_scimitar: { name: 'Iron scimitar', lvl: 20, xp: 50, bar: 'Iron bar', bars: 2, icon: '⚔️' },
+    iron_longsword: { name: 'Iron longsword', lvl: 21, xp: 50, bar: 'Iron bar', bars: 2, icon: '🗡️' },
+    iron_full_helm: { name: 'Iron full helm', lvl: 22, xp: 50, bar: 'Iron bar', bars: 2, icon: '🪖' },
+    iron_sq_shield: { name: 'Iron sq shield', lvl: 23, xp: 50, bar: 'Iron bar', bars: 2, icon: '🛡️' },
+    iron_kiteshield: { name: 'Iron kiteshield', lvl: 27, xp: 75, bar: 'Iron bar', bars: 3, icon: '🛡️' },
+    iron_chainbody: { name: 'Iron chainbody', lvl: 26, xp: 75, bar: 'Iron bar', bars: 3, icon: '🦺' },
+    iron_platelegs: { name: 'Iron platelegs', lvl: 31, xp: 75, bar: 'Iron bar', bars: 3, icon: '👖' },
+    iron_platebody: { name: 'Iron platebody', lvl: 33, xp: 125, bar: 'Iron bar', bars: 5, icon: '🦺' },
+    
+    // Steel
+    steel_dagger: { name: 'Steel dagger', lvl: 30, xp: 37.5, bar: 'Steel bar', bars: 1, icon: '🗡️' },
+    steel_axe: { name: 'Steel axe', lvl: 31, xp: 37.5, bar: 'Steel bar', bars: 1, icon: '🪓' },
+    steel_scimitar: { name: 'Steel scimitar', lvl: 35, xp: 75, bar: 'Steel bar', bars: 2, icon: '⚔️' },
+    steel_full_helm: { name: 'Steel full helm', lvl: 37, xp: 75, bar: 'Steel bar', bars: 2, icon: '🪖' },
+    steel_kiteshield: { name: 'Steel kiteshield', lvl: 42, xp: 112.5, bar: 'Steel bar', bars: 3, icon: '🛡️' },
+    steel_platebody: { name: 'Steel platebody', lvl: 48, xp: 187.5, bar: 'Steel bar', bars: 5, icon: '🦺' },
+    
+    // Mithril
+    mithril_dagger: { name: 'Mithril dagger', lvl: 50, xp: 50, bar: 'Mithril bar', bars: 1, icon: '🗡️' },
+    mithril_scimitar: { name: 'Mithril scimitar', lvl: 55, xp: 100, bar: 'Mithril bar', bars: 2, icon: '⚔️' },
+    mithril_platebody: { name: 'Mithril platebody', lvl: 68, xp: 250, bar: 'Mithril bar', bars: 5, icon: '🦺' },
+    
+    // Adamant
+    adamant_dagger: { name: 'Adamant dagger', lvl: 70, xp: 62.5, bar: 'Adamant bar', bars: 1, icon: '🗡️' },
+    adamant_scimitar: { name: 'Adamant scimitar', lvl: 75, xp: 125, bar: 'Adamant bar', bars: 2, icon: '⚔️' },
+    adamant_platebody: { name: 'Adamant platebody', lvl: 88, xp: 312.5, bar: 'Adamant bar', bars: 5, icon: '🦺' },
+    
+    // Rune
+    rune_dagger: { name: 'Rune dagger', lvl: 85, xp: 75, bar: 'Rune bar', bars: 1, icon: '🗡️' },
+    rune_scimitar: { name: 'Rune scimitar', lvl: 90, xp: 150, bar: 'Rune bar', bars: 2, icon: '⚔️' },
+    rune_platebody: { name: 'Rune platebody', lvl: 99, xp: 375, bar: 'Rune bar', bars: 5, icon: '🦺' }
+};
+
+// F2P Cooking
+const COOKING = {
+    shrimps: { name: 'Shrimps', lvl: 1, xp: 30, raw: 'Raw shrimps', icon: '🦐', burn: 34 },
+    anchovies: { name: 'Anchovies', lvl: 1, xp: 30, raw: 'Raw anchovies', icon: '🐟', burn: 34 },
+    sardine: { name: 'Sardine', lvl: 1, xp: 40, raw: 'Raw sardine', icon: '🐟', burn: 38 },
+    herring: { name: 'Herring', lvl: 5, xp: 50, raw: 'Raw herring', icon: '🐟', burn: 41 },
+    bread: { name: 'Bread', lvl: 1, xp: 40, raw: 'Bread dough', icon: '🍞', burn: 35 },
+    trout: { name: 'Trout', lvl: 15, xp: 70, raw: 'Raw trout', icon: '🐠', burn: 50 },
+    pike: { name: 'Pike', lvl: 20, xp: 80, raw: 'Raw pike', icon: '🐡', burn: 53 },
+    salmon: { name: 'Salmon', lvl: 25, xp: 90, raw: 'Raw salmon', icon: '🐟', burn: 58 },
+    tuna: { name: 'Tuna', lvl: 30, xp: 100, raw: 'Raw tuna', icon: '🐟', burn: 64 },
+    lobster: { name: 'Lobster', lvl: 40, xp: 120, raw: 'Raw lobster', icon: '🦞', burn: 74 },
+    swordfish: { name: 'Swordfish', lvl: 45, xp: 140, raw: 'Raw swordfish', icon: '🐟', burn: 86 }
+};
+
+// F2P Firemaking
+const FIREMAKING = {
+    logs: { name: 'Logs', lvl: 1, xp: 40, log: 'Logs', icon: '🪵' },
+    oak: { name: 'Oak logs', lvl: 15, xp: 60, log: 'Oak logs', icon: '🪵' },
+    willow: { name: 'Willow logs', lvl: 30, xp: 90, log: 'Willow logs', icon: '🪵' },
+    maple: { name: 'Maple logs', lvl: 45, xp: 135, log: 'Maple logs', icon: '🪵' },
+    yew: { name: 'Yew logs', lvl: 60, xp: 202.5, log: 'Yew logs', icon: '🪵' }
+};
+
+// F2P Crafting
+const CRAFTING = {
+    leather_gloves: { name: 'Leather gloves', lvl: 1, xp: 13.8, reqs: { 'Leather': 1 }, icon: '🧤' },
+    leather_boots: { name: 'Leather boots', lvl: 7, xp: 16.2, reqs: { 'Leather': 1 }, icon: '👢' },
+    leather_cowl: { name: 'Leather cowl', lvl: 9, xp: 18.5, reqs: { 'Leather': 1 }, icon: '🎭' },
+    leather_vambraces: { name: 'Leather vambraces', lvl: 11, xp: 22, reqs: { 'Leather': 1 }, icon: '🧤' },
+    leather_body: { name: 'Leather body', lvl: 14, xp: 25, reqs: { 'Leather': 1 }, icon: '🦺' },
+    leather_chaps: { name: 'Leather chaps', lvl: 18, xp: 27, reqs: { 'Leather': 1 }, icon: '👖' },
+    hard_leather_body: { name: 'Hard leather body', lvl: 28, xp: 35, reqs: { 'Hard leather': 1 }, icon: '🦺' },
+    coif: { name: 'Coif', lvl: 38, xp: 37, reqs: { 'Leather': 1 }, icon: '🎭' },
+    gold_ring: { name: 'Gold ring', lvl: 5, xp: 15, reqs: { 'Gold bar': 1 }, icon: '💍' },
+    gold_necklace: { name: 'Gold necklace', lvl: 6, xp: 20, reqs: { 'Gold bar': 1 }, icon: '📿' },
+    gold_amulet_u: { name: 'Gold amulet (u)', lvl: 8, xp: 30, reqs: { 'Gold bar': 1 }, icon: '🔶' },
+    sapphire_ring: { name: 'Sapphire ring', lvl: 20, xp: 40, reqs: { 'Gold bar': 1, 'Sapphire': 1 }, icon: '💍' },
+    sapphire_necklace: { name: 'Sapphire necklace', lvl: 22, xp: 55, reqs: { 'Gold bar': 1, 'Sapphire': 1 }, icon: '📿' },
+    emerald_ring: { name: 'Emerald ring', lvl: 27, xp: 55, reqs: { 'Gold bar': 1, 'Emerald': 1 }, icon: '💍' },
+    ruby_ring: { name: 'Ruby ring', lvl: 34, xp: 70, reqs: { 'Gold bar': 1, 'Ruby': 1 }, icon: '💍' },
+    diamond_ring: { name: 'Diamond ring', lvl: 43, xp: 85, reqs: { 'Gold bar': 1, 'Diamond': 1 }, icon: '💍' }
+};
+
+// F2P Runecraft
+const RUNECRAFT = {
+    air_rune: { name: 'Air rune', lvl: 1, xp: 5, reqs: { 'Rune essence': 1 }, icon: '💨', mult: [1,1,2,2,3,3,4,4,5,5,6] },
+    mind_rune: { name: 'Mind rune', lvl: 2, xp: 5.5, reqs: { 'Rune essence': 1 }, icon: '🧠' },
+    water_rune: { name: 'Water rune', lvl: 5, xp: 6, reqs: { 'Rune essence': 1 }, icon: '💧' },
+    earth_rune: { name: 'Earth rune', lvl: 9, xp: 6.5, reqs: { 'Rune essence': 1 }, icon: '🟤' },
+    fire_rune: { name: 'Fire rune', lvl: 14, xp: 7, reqs: { 'Rune essence': 1 }, icon: '🔥' },
+    body_rune: { name: 'Body rune', lvl: 20, xp: 7.5, reqs: { 'Rune essence': 1 }, icon: '🫀' }
+};
+
+// XP Table
+const XP_TABLE = [0,83,174,276,388,512,650,801,969,1154,1358,1584,1833,2107,2411,2746,3115,3523,3973,4470,5018,5624,6291,7028,7842,8740,9730,10824,12031,13363,14833,16456,18247,20224,22406,24815,27473,30408,33648,37224,41171,45529,50339,55649,61512,67983,75127,83014,91721,101333,111945,123660,136594,150872,166636,184040,203254,224466,247886,273742,302288,333804,368599,407015,449428,496254,547953,605032,668051,737627,814445,899257,992895,1096278,1210421,1336443,1475581,1629200,1798808,1986068,2192818,2421087,2673114,2951373,3258594,3597792,3972294,4385776,4842295,5346332,5902831,6517253,7195629,7944614,8771558,9684577,10692629,11805606,13034431];
+
+// =====================================================
+// GAME ENGINE
+// =====================================================
+
+const G = {
+    player: {
+        pos: null,
+        skills: {},
+        inv: [],
+        maxInv: 28,
+        discovered: {}
+    },
+    map: null,
+    playerMarker: null,
+    nodeMarkers: new Map(),
+    followPlayer: true,
+    activeNode: null,
+    isIdling: false,
+    idleInt: null,
+    idleProg: 0,
+    idleStats: { xp: 0, items: 0, start: 0 },
+    GRID: 0.00035,
+    DISC_R: 0.00015,
+    INT_R: 0.0002,
+
+    init() {
+        // Init all skills
+        Object.keys(SKILLS).forEach(s => {
+            this.player.skills[s] = { level: s === 'hitpoints' ? 10 : 1, xp: s === 'hitpoints' ? 1154 : 0 };
+        });
+
+        this.setLoad(10, 'Loading map...');
+        this.initMap();
+        this.setLoad(50, 'Preparing...');
+        this.initInv();
+        this.initSkillsPanel();
+        this.initCraftPanel();
+        this.setLoad(70, 'GPS...');
+        this.initGPS();
+        this.setLoad(90, 'Controls...');
+        this.initControls();
+        this.load();
+        this.updateUI();
+    },
+
+    setLoad(p, t) {
+        document.getElementById('load-bar').style.width = p + '%';
+        document.getElementById('load-text').textContent = t;
+    },
+
+    hideLoad() {
+        document.getElementById('loading').classList.add('hidden');
+    },
+
+    initMap() {
+        mapboxgl.accessToken = 'pk.eyJ1IjoibWFwYm94IiwiYSI6ImNpejY4NXVycTA2emYycXBndHRqcmZ3N3gifQ.rJcFIG214AriISLbB6B5aw';
+        this.map = new mapboxgl.Map({
+            container: 'map',
+            style: { version: 8, sources: { osm: { type: 'raster', tiles: ['https://a.tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize: 256 } }, layers: [{ id: 'osm', type: 'raster', source: 'osm' }] },
+            center: [-85.0586, 41.3668],
+            zoom: 18,
+            pitch: 45
+        });
+        this.map.on('load', () => {
+            this.map.setPaintProperty('osm', 'raster-hue-rotate', 90);
+            this.map.setPaintProperty('osm', 'raster-saturation', 0.15);
+            this.map.setPaintProperty('osm', 'raster-brightness-min', 0.3);
+        });
+        this.map.on('dragstart', () => { this.followPlayer = false; });
+        this.createPlayer();
+    },
+
+    createPlayer() {
+        const el = document.createElement('div');
+        el.className = 'player-marker';
+        el.innerHTML = `<div class="player-pulse"></div><div class="player-pulse"></div><div class="player-arrow"></div><div class="player-body">⚔️</div>`;
+        this.playerMarker = new mapboxgl.Marker({ element: el }).setLngLat([-85.0586, 41.3668]).addTo(this.map);
+    },
+
+    initGPS() {
+        if ('geolocation' in navigator) {
+            navigator.geolocation.watchPosition(p => this.onGPS(p), e => this.onGPSErr(e), { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
+        } else {
+            this.onGPSErr({});
+        }
+    },
+
+    onGPS(pos) {
+        const lat = pos.coords.latitude, lng = pos.coords.longitude;
+        this.player.pos = { lat, lng };
+        document.getElementById('gps-dot').className = 'gps-dot on';
+        document.getElementById('gps-txt').textContent = `±${Math.round(pos.coords.accuracy)}m`;
+        this.playerMarker.setLngLat([lng, lat]);
+        if (this.followPlayer) this.map.easeTo({ center: [lng, lat], duration: 300 });
+        this.discoverNodes(lat, lng);
+        this.checkInteract();
+        this.renderNodes();
+        setTimeout(() => this.hideLoad(), 200);
+        this.save();
+    },
+
+    onGPSErr(e) {
+        document.getElementById('gps-dot').className = 'gps-dot err';
+        document.getElementById('gps-txt').textContent = 'Demo';
+        this.player.pos = { lat: 41.3668, lng: -85.0586 };
+        this.playerMarker.setLngLat([-85.0586, 41.3668]);
+        this.discoverNodes(41.3668, -85.0586);
+        this.renderNodes();
+        setTimeout(() => this.hideLoad(), 300);
+    },
+
+    discoverNodes(lat, lng) {
+        const gLat = Math.floor(lat / this.GRID) * this.GRID;
+        const gLng = Math.floor(lng / this.GRID) * this.GRID;
+
+        for (let i = -2; i <= 2; i++) {
+            for (let j = -2; j <= 2; j++) {
+                const cLat = gLat + i * this.GRID;
+                const cLng = gLng + j * this.GRID;
+                const key = `${cLat.toFixed(6)},${cLng.toFixed(6)}`;
+                if (this.player.discovered[key] !== undefined) continue;
+                if (this.dist(lat, lng, cLat, cLng) > this.DISC_R) continue;
+                this.genNode(cLat, cLng, key);
+            }
+        }
+        this.updateNodeCt();
+    },
+
+    genNode(lat, lng, key) {
+        const seed = this.hash(key);
+        const rng = this.rng(seed);
+
+        if (rng() > 0.38) {
+            this.player.discovered[key] = null;
+            return;
+        }
+
+        // Pick category
+        const cats = Object.entries(NODE_CATS);
+        const catWeights = { mining: 35, woodcutting: 35, fishing: 30 };
+        let catRoll = rng() * 100;
+        let cat = 'mining';
+        for (const [c, w] of Object.entries(catWeights)) {
+            catRoll -= w;
+            if (catRoll <= 0) { cat = c; break; }
+        }
+
+        const catData = NODE_CATS[cat];
+        const nodes = catData.nodes;
+        const nodeKeys = Object.keys(nodes);
+
+        // Pick node type by weight
+        let total = nodeKeys.reduce((s, k) => s + nodes[k].weight, 0);
+        let roll = rng() * total;
+        let type = nodeKeys[0];
+        for (const k of nodeKeys) {
+            roll -= nodes[k].weight;
+            if (roll <= 0) { type = k; break; }
+        }
+
+        // Quality
+        let qRoll = rng() * 100;
+        let quality = 'common';
+        for (const [q, d] of Object.entries(QUALITIES)) {
+            qRoll -= d.weight;
+            if (qRoll <= 0) { quality = q; break; }
+        }
+
+        const eff = (0.8 + rng() * 0.4) * QUALITIES[quality].mult;
+        const nLat = lat + (rng() - 0.5) * this.GRID * 0.6;
+        const nLng = lng + (rng() - 0.5) * this.GRID * 0.6;
+
+        const nodeInfo = nodes[type];
+        const node = {
+            ...nodeInfo,
+            type, cat, quality, eff,
+            skill: catData.skill,
+            verb: catData.verb,
+            lat: nLat, lng: nLng, key
+        };
+
+        this.player.discovered[key] = node;
+        this.notify('Discovered!', `${QUALITIES[quality].name} ${node.name}`);
+    },
+
+    renderNodes() {
+        this.nodeMarkers.forEach(m => m.remove());
+        this.nodeMarkers.clear();
+        for (const [key, node] of Object.entries(this.player.discovered)) {
+            if (!node) continue;
+            this.createNodeMarker(node);
+        }
+    },
+
+    createNodeMarker(node) {
+        const el = document.createElement('div');
+        el.className = `node-marker q-${node.quality}`;
+        el.innerHTML = `<div class="node-wrap"><div class="node-glow"></div><div class="node-icon">${node.icon}<div class="node-badge">${QUALITIES[node.quality].name[0]}</div></div><div class="node-label">${Math.round(node.eff * 100)}%</div></div>`;
+        const marker = new mapboxgl.Marker({ element: el, anchor: 'bottom' }).setLngLat([node.lng, node.lat]).addTo(this.map);
+        el.addEventListener('click', () => this.onNodeTap(node));
+        this.nodeMarkers.set(node.key, marker);
+    },
+
+    checkInteract() {
+        if (!this.player.pos || this.isIdling) {
+            document.getElementById('action-btn').style.display = 'none';
+            return;
+        }
+        let closest = null, closestD = Infinity;
+        for (const node of Object.values(this.player.discovered)) {
+            if (!node) continue;
+            const d = this.dist(this.player.pos.lat, this.player.pos.lng, node.lat, node.lng);
+            if (d < this.INT_R && d < closestD) { closest = node; closestD = d; }
+        }
+        const btn = document.getElementById('action-btn');
+        if (closest) {
+            btn.style.display = 'block';
+            btn.textContent = `${closest.verb} ${closest.name}`;
+            btn.onclick = () => this.startIdle(closest);
+        } else {
+            btn.style.display = 'none';
+        }
+    },
+
+    onNodeTap(node) {
+        const pLvl = this.player.skills[node.skill]?.level || 1;
+        if (pLvl < node.lvl) {
+            this.notify('Level too low!', `Need ${SKILLS[node.skill].name} level ${node.lvl}`);
+            return;
+        }
+        this.startIdle(node);
+    },
+
+    startIdle(node) {
+        if (this.isIdling) this.stopIdle();
+        this.activeNode = node;
+        this.isIdling = true;
+        this.idleProg = 0;
+        this.idleStats = { xp: 0, items: 0, start: Date.now() };
+
+        const cycleTime = node.time / node.eff;
+
+        const icon = document.getElementById('idle-icon');
+        icon.textContent = node.icon;
+        icon.style.background = `linear-gradient(180deg, ${QUALITIES[node.quality].color}88, ${QUALITIES[node.quality].color})`;
+        icon.style.borderColor = QUALITIES[node.quality].color;
+
+        document.getElementById('idle-name').textContent = node.name;
+        document.getElementById('idle-q').textContent = QUALITIES[node.quality].name;
+        document.getElementById('idle-q').style.color = QUALITIES[node.quality].color;
+        document.getElementById('idle-eff').textContent = Math.round(node.eff * 100) + '%';
+        document.getElementById('idle-action').textContent = node.verb + '...';
+
+        document.getElementById('idle-panel').classList.add('open');
+        document.getElementById('action-btn').style.display = 'none';
+        this.closeAllPanels('idle-panel');
+
+        const tickMs = 50;
+        const progTick = (tickMs / cycleTime) * 100;
+
+        this.idleInt = setInterval(() => {
+            this.idleProg += progTick;
+            if (this.idleProg >= 100) {
+                this.idleProg = 0;
+                this.gather();
+            }
+            this.updateIdleUI(cycleTime);
+        }, tickMs);
+
+        this.save();
+    },
+
+    gather() {
+        const node = this.activeNode;
+        if (!node) return;
+
+        const xp = Math.round(node.xp * QUALITIES[node.quality].mult * 10) / 10;
+        this.addXP(node.skill, xp);
+        this.addItem(node.res, node.icon);
+
+        this.idleStats.xp += xp;
+        this.idleStats.items += 1;
+
+        this.showXP(xp);
+        this.showRes(node.icon);
+        this.updateUI();
+    },
+
+    updateIdleUI(cycle) {
+        document.getElementById('idle-fill').style.width = this.idleProg + '%';
+        document.getElementById('idle-timer').textContent = ((cycle * (100 - this.idleProg) / 100) / 1000).toFixed(1) + 's';
+        document.getElementById('idle-xp').textContent = Math.round(this.idleStats.xp).toLocaleString();
+        document.getElementById('idle-items').textContent = this.idleStats.items;
+        const hrs = (Date.now() - this.idleStats.start) / 3600000;
+        document.getElementById('idle-rate').textContent = (hrs > 0 ? Math.round(this.idleStats.xp / hrs) : 0).toLocaleString() + '/hr';
+    },
+
+    stopIdle() {
+        if (this.idleInt) clearInterval(this.idleInt);
+        this.isIdling = false;
+        this.activeNode = null;
+        document.getElementById('idle-panel').classList.remove('open');
+        this.checkInteract();
+    },
+
+    addXP(skill, amt) {
+        const s = this.player.skills[skill];
+        if (!s) return;
+        const oldLvl = s.level;
+        s.xp += amt;
+        s.level = this.calcLevel(s.xp);
+        if (s.level > oldLvl) this.showLvlUp(skill, s.level);
+        this.updateSkillsPanel();
+    },
+
+    calcLevel(xp) {
+        for (let i = XP_TABLE.length - 1; i >= 0; i--) {
+            if (xp >= XP_TABLE[i]) return i + 1;
+        }
+        return 1;
+    },
+
+    xpProg(skill) {
+        const s = this.player.skills[skill];
+        if (s.level >= 99) return 100;
+        const curr = XP_TABLE[s.level - 1] || 0;
+        const next = XP_TABLE[s.level] || 1;
+        return ((s.xp - curr) / (next - curr)) * 100;
+    },
+
+    addItem(name, icon) {
+        const ex = this.player.inv.find(i => i.name === name);
+        if (ex) ex.ct++;
+        else if (this.player.inv.length < this.player.maxInv) this.player.inv.push({ name, icon, ct: 1 });
+        this.updateInv();
+    },
+
+    hasItems(reqs) {
+        for (const [item, ct] of Object.entries(reqs)) {
+            const have = this.player.inv.find(i => i.name === item);
+            if (!have || have.ct < ct) return false;
+        }
+        return true;
+    },
+
+    removeItems(reqs) {
+        for (const [item, ct] of Object.entries(reqs)) {
+            const have = this.player.inv.find(i => i.name === item);
+            if (have) {
+                have.ct -= ct;
+                if (have.ct <= 0) this.player.inv = this.player.inv.filter(i => i.name !== item);
+            }
+        }
+        this.updateInv();
+    },
+
+    showXP(amt) {
+        const el = document.createElement('div');
+        el.className = 'xp-drop';
+        el.textContent = `+${amt} XP`;
+        el.style.left = '50%';
+        el.style.top = '35%';
+        el.style.transform = 'translateX(-50%)';
+        document.getElementById('game').appendChild(el);
+        setTimeout(() => el.remove(), 1800);
+    },
+
+    showRes(icon) {
+        const el = document.createElement('div');
+        el.className = 'res-drop';
+        el.textContent = icon;
+        el.style.left = `${45 + Math.random() * 10}%`;
+        el.style.top = '38%';
+        document.getElementById('game').appendChild(el);
+        setTimeout(() => el.remove(), 1300);
+    },
+
+    notify(txt, sub = '') {
+        document.getElementById('notif-txt').textContent = txt;
+        document.getElementById('notif-sub').textContent = sub;
+        document.getElementById('notif').classList.add('show');
+        setTimeout(() => document.getElementById('notif').classList.remove('show'), 2500);
+    },
+
+    showLvlUp(skill, lvl) {
+        document.getElementById('lvl-icon').textContent = SKILLS[skill]?.icon || '⭐';
+        document.getElementById('lvl-skill').textContent = SKILLS[skill]?.name || skill;
+        document.getElementById('lvl-num').textContent = lvl;
+        document.getElementById('lvlup').classList.add('show');
+    },
+
+    initInv() {
+        const grid = document.getElementById('inv-grid');
+        grid.innerHTML = '';
+        for (let i = 0; i < this.player.maxInv; i++) {
+            const slot = document.createElement('div');
+            slot.className = 'inv-slot';
+            grid.appendChild(slot);
+        }
+    },
+
+    updateInv() {
+        const slots = document.querySelectorAll('.inv-slot');
+        slots.forEach((slot, i) => {
+            const item = this.player.inv[i];
+            if (item) {
+                slot.className = 'inv-slot filled';
+                slot.innerHTML = `<div class="inv-icon">${item.icon}</div>${item.ct > 1 ? `<div class="inv-ct">${item.ct}</div>` : ''}`;
+            } else {
+                slot.className = 'inv-slot';
+                slot.innerHTML = '';
+            }
+        });
+    },
+
+    initSkillsPanel() {
+        const list = document.getElementById('skills-list');
+        list.innerHTML = Object.entries(SKILLS).map(([id, s]) => `
+            <div class="skill-row" data-skill="${id}">
+                <div class="skill-icon">${s.icon}</div>
+                <div class="skill-info">
+                    <div class="skill-hdr"><span class="skill-name">${s.name}</span><span class="skill-lvl" id="${id}-lvl">1</span></div>
+                    <div class="skill-bar"><div class="skill-fill" id="${id}-bar"></div></div>
+                    <div class="skill-xp" id="${id}-xp">0 / 83 XP</div>
+                </div>
+            </div>
+        `).join('');
+    },
+
+    updateSkillsPanel() {
+        Object.keys(SKILLS).forEach(skill => {
+            const s = this.player.skills[skill];
+            if (!s) return;
+            const lvlEl = document.getElementById(`${skill}-lvl`);
+            const barEl = document.getElementById(`${skill}-bar`);
+            const xpEl = document.getElementById(`${skill}-xp`);
+            if (lvlEl) lvlEl.textContent = s.level;
+            if (barEl) barEl.style.width = this.xpProg(skill) + '%';
+            if (xpEl) {
+                const curr = XP_TABLE[s.level - 1] || 0;
+                const next = XP_TABLE[s.level] || 0;
+                xpEl.textContent = `${Math.floor(s.xp).toLocaleString()} / ${next.toLocaleString()} XP`;
+            }
+        });
+    },
+
+    initCraftPanel() {
+        const tabs = document.getElementById('craft-tabs');
+        tabs.innerHTML = ['Smelting', 'Smithing', 'Cooking', 'Crafting', 'Firemaking'].map((t, i) => `<div class="tab ${i === 0 ? 'on' : ''}" data-craft="${t.toLowerCase()}">${t}</div>`).join('');
+        this.renderRecipes('smelting');
+    },
+
+    renderRecipes(cat) {
+        const list = document.getElementById('recipes-list');
+        let recipes = {};
+        let skill = 'smithing';
+
+        switch (cat) {
+            case 'smelting': recipes = SMELTING; skill = 'smithing'; break;
+            case 'smithing': recipes = SMITHING; skill = 'smithing'; break;
+            case 'cooking': recipes = COOKING; skill = 'cooking'; break;
+            case 'crafting': recipes = CRAFTING; skill = 'crafting'; break;
+            case 'firemaking': recipes = FIREMAKING; skill = 'firemaking'; break;
+        }
+
+        const pLvl = this.player.skills[skill]?.level || 1;
+
+        list.innerHTML = Object.entries(recipes).map(([id, r]) => {
+            const canMake = pLvl >= r.lvl;
+            const reqs = r.reqs || (r.bar ? { [r.bar]: r.bars } : (r.raw ? { [r.raw]: 1 } : (r.log ? { [r.log]: 1 } : {})));
+            const hasReqs = this.hasItems(reqs);
+
+            return `
+                <div class="skill-row" style="opacity:${canMake ? 1 : 0.5};cursor:${canMake && hasReqs ? 'pointer' : 'default'}" data-recipe="${id}" data-cat="${cat}">
+                    <div class="skill-icon">${r.icon}</div>
+                    <div class="skill-info">
+                        <div class="skill-hdr">
+                            <span class="skill-name">${r.name}</span>
+                            <span class="skill-lvl">Lv.${r.lvl}</span>
+                        </div>
+                        <div class="skill-xp" style="color:#7cfc00">+${r.xp} XP</div>
+                        <div class="skill-xp">${Object.entries(reqs).map(([item, ct]) => `${ct}x ${item}`).join(', ')}</div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        // Add click handlers
+        list.querySelectorAll('[data-recipe]').forEach(el => {
+            el.addEventListener('click', () => this.craft(el.dataset.cat, el.dataset.recipe));
+        });
+    },
+
+    craft(cat, id) {
+        let recipes, skill;
+        switch (cat) {
+            case 'smelting': recipes = SMELTING; skill = 'smithing'; break;
+            case 'smithing': recipes = SMITHING; skill = 'smithing'; break;
+            case 'cooking': recipes = COOKING; skill = 'cooking'; break;
+            case 'crafting': recipes = CRAFTING; skill = 'crafting'; break;
+            case 'firemaking': recipes = FIREMAKING; skill = 'firemaking'; break;
+        }
+
+        const r = recipes[id];
+        if (!r) return;
+
+        const pLvl = this.player.skills[skill]?.level || 1;
+        if (pLvl < r.lvl) {
+            this.notify('Level too low!', `Need ${SKILLS[skill].name} level ${r.lvl}`);
+            return;
+        }
+
+        const reqs = r.reqs || (r.bar ? { [r.bar]: r.bars } : (r.raw ? { [r.raw]: 1 } : (r.log ? { [r.log]: 1 } : {})));
+        if (!this.hasItems(reqs)) {
+            this.notify('Missing materials!', '');
+            return;
+        }
+
+        // Remove materials
+        this.removeItems(reqs);
+
+        // Add XP
+        this.addXP(skill, r.xp);
+
+        // Add product (for smelting/smithing/crafting)
+        if (cat !== 'firemaking') {
+            const productName = r.name;
+            const productIcon = r.icon;
+            this.addItem(productName, productIcon);
+        }
+
+        this.notify('Crafted!', r.name);
+        this.showXP(r.xp);
+        this.renderRecipes(cat);
+        this.save();
+    },
+
+    updateNodesPanel() {
+        // Tabs for each category
+        const tabs = document.getElementById('node-tabs');
+        tabs.innerHTML = ['All', 'Mining', 'Woodcutting', 'Fishing'].map((t, i) => `<div class="tab ${i === 0 ? 'on' : ''}" data-nodecat="${t.toLowerCase()}">${t}</div>`).join('');
+
+        this.renderNodesGrid('all');
+    },
+
+    renderNodesGrid(cat) {
+        const grid = document.getElementById('nodes-grid');
+        let nodes = Object.values(this.player.discovered).filter(n => n);
+
+        if (cat !== 'all') {
+            nodes = nodes.filter(n => n.cat === cat);
+        }
+
+        nodes.sort((a, b) => QUALITIES[b.quality].mult - QUALITIES[a.quality].mult);
+
+        if (nodes.length === 0) {
+            grid.innerHTML = '<div style="color:#888;text-align:center;padding:20px;">Walk around to discover nodes!</div>';
+            return;
+        }
+
+        grid.innerHTML = nodes.map(n => `
+            <div class="node-card ${this.activeNode?.key === n.key ? 'active' : ''}" data-key="${n.key}">
+                <div class="node-card-hdr">
+                    <span class="node-card-icon">${n.icon}</span>
+                    <span class="node-card-name">${n.name}</span>
+                    <span class="node-card-q" style="background:${QUALITIES[n.quality].color}">${QUALITIES[n.quality].name[0]}</span>
+                </div>
+                <div class="node-card-stats">
+                    <span>Lv.<span>${n.lvl}</span></span>
+                    <span><span>${Math.round(n.eff * 100)}%</span></span>
+                </div>
+            </div>
+        `).join('');
+
+        grid.querySelectorAll('.node-card').forEach(card => {
+            card.addEventListener('click', () => {
+                const node = this.player.discovered[card.dataset.key];
+                if (node) this.onNodeTap(node);
+            });
+        });
+    },
+
+    updateNodeCt() {
+        const ct = Object.values(this.player.discovered).filter(n => n).length;
+        document.getElementById('node-ct').textContent = ct;
+        const badge = document.getElementById('nodes-badge');
+        if (ct > 0) { badge.style.display = 'block'; badge.textContent = ct; }
+        else badge.style.display = 'none';
+    },
+
+    updateUI() {
+        this.updateSkillsPanel();
+        this.updateInv();
+        this.updateNodeCt();
+    },
+
+    closeAllPanels(except = '') {
+        ['nodes-panel', 'skills-panel', 'inv-panel', 'craft-panel', 'idle-panel'].forEach(id => {
+            if (id !== except) document.getElementById(id).classList.remove('open');
+        });
+    },
+
+    initControls() {
+        document.getElementById('focus-btn').addEventListener('click', () => {
+            this.followPlayer = true;
+            if (this.player.pos) this.map.easeTo({ center: [this.player.pos.lng, this.player.pos.lat], duration: 500 });
+        });
+
+        document.querySelectorAll('.panel-close').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const panel = btn.dataset.close;
+                if (panel) document.getElementById(panel).classList.remove('open');
+            });
+        });
+
+        document.getElementById('idle-close').addEventListener('click', () => this.stopIdle());
+        document.getElementById('lvl-close').addEventListener('click', () => document.getElementById('lvlup').classList.remove('show'));
+
+        document.querySelectorAll('.nav-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const p = btn.dataset.p;
+                document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('on'));
+                btn.classList.add('on');
+                this.closeAllPanels();
+
+                if (p === 'nodes') {
+                    this.updateNodesPanel();
+                    document.getElementById('nodes-panel').classList.add('open');
+                } else if (p === 'skills') {
+                    this.updateSkillsPanel();
+                    document.getElementById('skills-panel').classList.add('open');
+                } else if (p === 'inv') {
+                    document.getElementById('inv-panel').classList.add('open');
+                } else if (p === 'craft') {
+                    document.getElementById('craft-panel').classList.add('open');
+                }
+            });
+        });
+
+        // Craft tabs
+        document.getElementById('craft-tabs').addEventListener('click', e => {
+            if (e.target.classList.contains('tab')) {
+                document.querySelectorAll('#craft-tabs .tab').forEach(t => t.classList.remove('on'));
+                e.target.classList.add('on');
+                this.renderRecipes(e.target.dataset.craft);
+            }
+        });
+
+        // Node tabs
+        document.getElementById('node-tabs').addEventListener('click', e => {
+            if (e.target.classList.contains('tab')) {
+                document.querySelectorAll('#node-tabs .tab').forEach(t => t.classList.remove('on'));
+                e.target.classList.add('on');
+                this.renderNodesGrid(e.target.dataset.nodecat);
+            }
+        });
+    },
+
+    save() {
+        localStorage.setItem('osrs_go_f2p', JSON.stringify({
+            skills: this.player.skills,
+            inv: this.player.inv,
+            discovered: this.player.discovered
+        }));
+    },
+
+    load() {
+        const data = localStorage.getItem('osrs_go_f2p');
+        if (data) {
+            const s = JSON.parse(data);
+            if (s.skills) this.player.skills = { ...this.player.skills, ...s.skills };
+            if (s.inv) this.player.inv = s.inv;
+            if (s.discovered) this.player.discovered = s.discovered;
+        }
+    },
+
+    dist(lat1, lng1, lat2, lng2) {
+        return Math.sqrt((lat2 - lat1) ** 2 + (lng2 - lng1) ** 2);
+    },
+
+    hash(str) {
+        let h = 0;
+        for (let i = 0; i < str.length; i++) h = ((h << 5) - h) + str.charCodeAt(i);
+        return Math.abs(h);
+    },
+
+    rng(seed) {
+        return () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
+    }
+};
+
+function start() {
+    if (typeof mapboxgl !== 'undefined') G.init();
+    else setTimeout(start, 100);
+}
+document.addEventListener('DOMContentLoaded', start);
+</script>
+</body>
+</html>
